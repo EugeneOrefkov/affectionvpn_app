@@ -69,9 +69,17 @@ jobs:
           DIAG+="create resp:\n$RESP\n"
           RELEASE_ID=$(printf '%s' "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
           if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+          fi
+          if [ -z "$RELEASE_ID" ]; then
             gh issue create --title "Release failed on $GITHUB_REF_NAME" --body "$DIAG"
             exit 1
           fi
+          DIAG+="release id: $RELEASE_ID\n"
           curl -s -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Content-Type: application/octet-stream" \
