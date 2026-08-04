@@ -55,17 +55,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          APK="build/app/outputs/flutter-apk/app-release.apk"
-          ls -la "build/app/outputs/flutter-apk/"
-          OUT=$(gh release create "$GITHUB_REF_NAME" \
-            "$APK" \
-            --title "Affection VPN ${GITHUB_REF_NAME#v}" \
-            --generate-notes 2>&1)
-          RC=$?
-          echo "$OUT"
-          if [ $RC -ne 0 ]; then
-            gh issue create \
-              --title "Release failed on $GITHUB_REF_NAME" \
-              --body "$OUT"
-            exit $RC
+          DIAG="cwd: $(pwd)\n"
+          DIAG+="find apk:\n$(find . -name '*.apk' 2>&1)\n"
+          DIAG+="ls dir:\n$(ls -la build/app/outputs/flutter-apk/ 2>&1)\n"
+          APK="$PWD/build/app/outputs/flutter-apk/app-release.apk"
+          DIAG+="APK exists: $(test -f "$APK" && echo yes || echo no)\n"
+          RESP=$(curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -d "{\"tag_name\":\"$GITHUB_REF_NAME\",\"name\":\"Affection VPN ${GITHUB_REF_NAME#v}\",\"generate_release_notes\":true}" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases")
+          DIAG+="create resp:\n$RESP\n"
+          RELEASE_ID=$(printf '%s' "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+          if [ -z "$RELEASE_ID" ]; then
+            gh issue create --title "Release failed on $GITHUB_REF_NAME" --body "$DIAG"
+            exit 1
           fi
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@$APK" \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=affection_vpn-${GITHUB_REF_NAME#v}.apk" \
+            -o /tmp/upload.json
+          DIAG+="upload resp:\n$(cat /tmp/upload.json)\n"
+          python3 -c "import json; d=json.load(open('/tmp/upload.json')); print('uploaded:', d.get('name'), d.get('size'))"
+          printf '%b' "$DIAG"
