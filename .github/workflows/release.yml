@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   build:
@@ -19,6 +20,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.44.8
 
       - name: Flutter pub get
         run: flutter pub get
@@ -33,9 +35,21 @@ jobs:
           BUILD_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
           flutter build apk --release \
             --build-name="$VERSION" \
-            --build-number="$BUILD_CODE"
+            --build-number="$BUILD_CODE" 2>&1 | tee /tmp/build.log
+        env:
+          CI: "true"
+
+      - name: Report build failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "CI build failure on $GITHUB_REF_NAME" \
+            --body-file /tmp/build.log
 
       - name: Create GitHub Release
+        if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
