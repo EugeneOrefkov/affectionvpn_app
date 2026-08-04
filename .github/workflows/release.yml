@@ -50,12 +50,15 @@ jobs:
 
       - name: Create GitHub Release
         if: success()
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          ls -la "build/app/outputs/flutter-apk/"
           OUT=$(gh release create "$GITHUB_REF_NAME" \
-            build/app/outputs/flutter-apk/app-release.apk \
+            "$APK" \
             --title "Affection VPN ${GITHUB_REF_NAME#v}" \
             --generate-notes 2>&1)
           RC=$?
