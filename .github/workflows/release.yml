@@ -27,6 +27,7 @@ jobs:
 
       - name: Build release APK
         run: |
+          set -o pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           MAJOR="${VERSION%%.*}"
           REST="${VERSION#*.}"
