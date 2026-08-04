@@ -79,5 +79,10 @@ jobs:
             "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=affection_vpn-${GITHUB_REF_NAME#v}.apk" \
             -o /tmp/upload.json
           DIAG+="upload resp:\n$(cat /tmp/upload.json)\n"
-          python3 -c "import json; d=json.load(open('/tmp/upload.json')); print('uploaded:', d.get('name'), d.get('size'))"
+          UP_NAME=$(python3 -c "import json; d=json.load(open('/tmp/upload.json')); print(d.get('name') or '')" 2>/dev/null)
+          if [ -z "$UP_NAME" ]; then
+            gh issue create --title "Asset upload failed on $GITHUB_REF_NAME" --body "$DIAG"
+            exit 1
+          fi
+          echo "uploaded: $UP_NAME"
           printf '%b' "$DIAG"
