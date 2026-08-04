@@ -53,8 +53,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          gh release create "$GITHUB_REF_NAME" \
+          set +e
+          OUT=$(gh release create "$GITHUB_REF_NAME" \
             build/app/outputs/flutter-apk/app-release.apk \
-            --title "Affection VPN $VERSION" \
-            --generate-notes
+            --title "Affection VPN ${GITHUB_REF_NAME#v}" \
+            --generate-notes 2>&1)
+          RC=$?
+          echo "$OUT"
+          if [ $RC -ne 0 ]; then
+            gh issue create \
+              --title "Release failed on $GITHUB_REF_NAME" \
+              --body "$OUT"
+            exit $RC
+          fi
