@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -25,6 +27,7 @@ class AppState extends ChangeNotifier {
         return;
       }
       unawaited(_measureDelays());
+      unawaited(refreshProxyHost());
     });
   }
 
@@ -49,6 +52,7 @@ class AppState extends ChangeNotifier {
   double? _downloadProgress;
   String? _downloadedApkPath;
   String? _currentVersion;
+  String _proxyHost = '127.0.0.1';
 
   String? get subscriptionUrl => _subscriptionUrl;
   List<ServerConfig> get servers => List.unmodifiable(_servers);
@@ -70,6 +74,11 @@ class AppState extends ChangeNotifier {
   bool get proxyOnly => _storage.proxyOnly;
   bool get autoConnect => _storage.autoConnect;
   bool get autoSelectBest => _storage.autoSelectBest;
+
+  String get proxyLogin => _storage.proxyLogin;
+  String get proxyPassword => _storage.proxyPassword;
+  String get proxyHost => _proxyHost;
+  int get proxyPort => VpnService.proxyPort;
 
   ServerConfig? get selectedServer =>
       _servers.isEmpty ? null : _servers[_selectedIndex.clamp(0, _servers.length - 1)];
@@ -263,14 +272,65 @@ class AppState extends ChangeNotifier {
       }
     }
 
+    var config = server.config;
+    if (proxyOnly) {
+      await _ensureProxyCredentials();
+      await refreshProxyHost();
+      config = vpn.buildAuthProxyConfig(
+        config,
+        _storage.proxyLogin,
+        _storage.proxyPassword,
+      );
+    }
+
     _connectionStatus = ConnectionStatus.connecting;
     notifyListeners();
     try {
-      await vpn.start(server, proxyOnly: proxyOnly);
+      await vpn.start(server, proxyOnly: proxyOnly, config: config);
     } catch (_) {
       _connectionStatus = ConnectionStatus.disconnected;
       notifyListeners();
     }
+  }
+
+  Future<void> _ensureProxyCredentials() async {
+    if (_storage.proxyLogin.isNotEmpty && _storage.proxyPassword.isNotEmpty) {
+      return;
+    }
+    const chars =
+        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    final random = Random.secure();
+    final password = List.generate(
+      12,
+      (_) => chars[random.nextInt(chars.length)],
+    ).join();
+    await _storage.setProxyCredentials('affection', password);
+  }
+
+  Future<void> refreshProxyHost() async {
+    _proxyHost = await _resolveLanIp();
+    notifyListeners();
+  }
+
+  Future<String> _resolveLanIp() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.IPv4,
+      );
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          final ip = addr.address;
+          if (ip.startsWith('127.') ||
+              ip.startsWith('169.254.') ||
+              ip == '0.0.0.0') {
+            continue;
+          }
+          return ip;
+        }
+      }
+    } catch (_) {}
+    return '127.0.0.1';
   }
 
   Future<void> _disconnect() async {

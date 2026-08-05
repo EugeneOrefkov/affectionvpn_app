@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_vless/flutter_vless.dart';
@@ -27,10 +28,14 @@ class VpnService {
     return _vless.requestPermission();
   }
 
-  Future<void> start(ServerConfig server, {bool proxyOnly = false}) {
+  Future<void> start(
+    ServerConfig server, {
+    bool proxyOnly = false,
+    String? config,
+  }) {
     return _vless.startVless(
       remark: server.displayName,
-      config: server.config,
+      config: config ?? server.config,
       proxyOnly: proxyOnly,
       notificationDisconnectButtonName: 'ОТКЛЮЧИТЬ',
     );
@@ -49,6 +54,49 @@ class VpnService {
   Future<String> getCoreVersion() => _vless.getCoreVersion();
 
   static const _probeTimeout = Duration(seconds: 2);
+  static const proxyPort = 10810;
+
+  String buildAuthProxyConfig(
+    String config,
+    String login,
+    String password,
+  ) {
+    final map = jsonDecode(config) as Map<String, dynamic>;
+    final inbounds = <Map<String, dynamic>>[];
+    final usedPorts = <int>{};
+    for (final item in (map['inbounds'] as List? ?? const [])) {
+      if (item is Map) {
+        inbounds.add(Map<String, dynamic>.from(item));
+        final port = item['port'];
+        if (port is int) {
+          usedPorts.add(port);
+        }
+      }
+    }
+    var port = proxyPort;
+    while (usedPorts.contains(port)) {
+      port++;
+    }
+    inbounds.add({
+      'tag': 'socks-auth',
+      'port': port,
+      'listen': '0.0.0.0',
+      'protocol': 'socks',
+      'settings': {
+        'auth': 'password',
+        'udp': true,
+        'accounts': [
+          {'user': login, 'pass': password},
+        ],
+      },
+      'sniffing': {
+        'enabled': true,
+        'destOverride': ['http', 'tls'],
+      },
+    });
+    map['inbounds'] = inbounds;
+    return jsonEncode(map);
+  }
 
   Future<int?> measureServerDelay(ServerConfig server) {
     if (server.address.isNotEmpty && server.port > 0) {

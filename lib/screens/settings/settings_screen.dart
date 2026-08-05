@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -27,8 +28,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadCoreVersion() async {
     try {
       final version = await VpnService.instance.getCoreVersion();
+      final match = RegExp(r'(\d+\.\d+\.\d+)').firstMatch(version);
       if (mounted) {
-        setState(() => _coreVersion = version);
+        setState(() => _coreVersion = match?.group(1) ?? version.trim());
       }
     } catch (_) {}
   }
@@ -157,7 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                        padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
                         child: _DangerButton(
                           icon: Icons.delete_outline,
                           label: 'Удалить подписку',
@@ -193,6 +195,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         value: state.proxyOnly,
                         onChanged: state.setProxyOnly,
                       ),
+                      if (state.proxyOnly) ...[
+                        const Divider(height: 1),
+                        _ProxyInfo(
+                          host: state.proxyHost,
+                          port: state.proxyPort,
+                          login: state.proxyLogin,
+                          password: state.proxyPassword,
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -318,7 +329,7 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       child: Row(
         children: [
           Icon(icon, color: AppColors.primary, size: 20),
@@ -334,7 +345,7 @@ class _InfoRow extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.textPrimary,
@@ -343,6 +354,121 @@ class _InfoRow extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProxyInfo extends StatelessWidget {
+  const _ProxyInfo({
+    required this.host,
+    required this.port,
+    required this.login,
+    required this.password,
+  });
+
+  final String host;
+  final int port;
+  final String login;
+  final String password;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.lan_outlined,
+                color: AppColors.accent,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'SOCKS5 прокси',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ProxyValueRow(label: 'Адрес', value: host, copyable: true),
+          _ProxyValueRow(label: 'Порт', value: '$port', copyable: true),
+          _ProxyValueRow(label: 'Логин', value: login, copyable: true),
+          _ProxyValueRow(label: 'Пароль', value: password, copyable: true),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProxyValueRow extends StatelessWidget {
+  const _ProxyValueRow({
+    required this.label,
+    required this.value,
+    this.copyable = false,
+  });
+
+  final String label;
+  final String value;
+  final bool copyable;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 64,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SelectableText(
+              value,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (copyable)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: value));
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    const SnackBar(
+                      content: Text('Скопировано'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+              },
+              icon: const Icon(
+                Icons.copy,
+                color: AppColors.textTertiary,
+                size: 16,
+              ),
+            ),
         ],
       ),
     );

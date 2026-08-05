@@ -15,6 +15,8 @@ class StorageService {
   static const _kAutoConnect = 'auto_connect';
   static const _kAutoSelectBest = 'auto_select_best';
   static const _kLastUpdateCheck = 'last_update_check';
+  static const _kProxyLogin = 'proxy_login';
+  static const _kProxyPassword = 'proxy_password';
 
   late SharedPreferences _prefs;
 
@@ -89,6 +91,15 @@ class StorageService {
 
   Future<void> setLastUpdateCheck(DateTime time) async {
     await _prefs.setInt(_kLastUpdateCheck, time.millisecondsSinceEpoch);
+  }
+
+  String get proxyLogin => _prefs.getString(_kProxyLogin) ?? '';
+
+  String get proxyPassword => _prefs.getString(_kProxyPassword) ?? '';
+
+  Future<void> setProxyCredentials(String login, String password) async {
+    await _prefs.setString(_kProxyLogin, login);
+    await _prefs.setString(_kProxyPassword, password);
   }
 
   Future<void> clearSubscription() async {
