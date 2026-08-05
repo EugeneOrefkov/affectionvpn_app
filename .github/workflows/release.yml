@@ -50,12 +50,12 @@ jobs:
           set -e
           mkdir -p "$HOME/.gradle"
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/affectionvpn-release.jks"
-          cat >> "$HOME/.gradle/gradle.properties" <<EOF
-AFFECTION_STORE_FILE=$RUNNER_TEMP/affectionvpn-release.jks
-AFFECTION_STORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD
-AFFECTION_KEY_ALIAS=$ANDROID_KEY_ALIAS
-AFFECTION_KEY_PASSWORD=$ANDROID_KEY_PASSWORD
-EOF
+          {
+            echo "AFFECTION_STORE_FILE=$RUNNER_TEMP/affectionvpn-release.jks"
+            echo "AFFECTION_STORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
+            echo "AFFECTION_KEY_ALIAS=$ANDROID_KEY_ALIAS"
+            echo "AFFECTION_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
+          } >> "$HOME/.gradle/gradle.properties"
 
       - name: Build release APK
         run: |
