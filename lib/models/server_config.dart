@@ -73,32 +73,31 @@ class ServerConfig {
             for (final tag in (rule['inboundTag'] as List? ?? const []))
               if (tag is String) tag,
       };
+      final inbounds = (map['inbounds'] as List? ?? const []);
+      final inboundTags = <String>{
+        for (final inbound in inbounds)
+          if (inbound is Map)
+            if ((inbound['tag'] as String?)?.isNotEmpty ?? false)
+              inbound['tag'] as String,
+      };
       final tags = <String>{
         'socks',
         'http',
         'socks-auth',
-        // The native plugin injects its own local SOCKS/HTTP inbounds when its
-        // fixed ports are free. Those are tagged `socks`/`http`, or
-        // `socks_1`/`http_1` (and up) when the imported config already uses the
-        // base tags. tun2socks always feeds the plugin-provided inbound, so the
-        // generated tags need balancer rules too.
-        for (var i = 1; i <= 5; i++) 'socks_$i',
-        for (var i = 1; i <= 5; i++) 'http_$i',
+        // Config's own local proxy inbounds are balanced as well.
+        for (final inbound in inbounds)
+          if (inbound is Map &&
+              (inbound['protocol'] == 'socks' ||
+                  inbound['protocol'] == 'http'))
+            if ((inbound['tag'] as String?)?.isNotEmpty ?? false)
+              inbound['tag'] as String,
+        // The native plugin injects one local SOCKS and one HTTP inbound,
+        // tagging each with the first free name (`socks`, `socks_1`, ...).
+        // Mirror that exact rule so the balancer is applied no matter how many
+        // tags the imported config already defines.
+        nextFreeInboundTag(inboundTags, 'socks'),
+        nextFreeInboundTag(inboundTags, 'http'),
       };
-      final inbounds = map['inbounds'];
-      if (inbounds is List) {
-        for (final inbound in inbounds) {
-          if (inbound is Map) {
-            final protocol = inbound['protocol'];
-            if (protocol == 'socks' || protocol == 'http') {
-              final tag = inbound['tag'];
-              if (tag is String && tag.isNotEmpty) {
-                tags.add(tag);
-              }
-            }
-          }
-        }
-      }
       for (final tag in tags) {
         if (existingTags.contains(tag)) {
           continue;
@@ -114,6 +113,19 @@ class ServerConfig {
     } catch (_) {
       return config;
     }
+  }
+
+  /// Mirrors the native plugin's `uniqueInboundTag`: the first free tag
+  /// starting from [preferred], then `{preferred}_1`, `{preferred}_2`, ...
+  static String nextFreeInboundTag(Set<String> tags, String preferred) {
+    if (!tags.contains(preferred)) {
+      return preferred;
+    }
+    var index = 1;
+    while (tags.contains('${preferred}_$index')) {
+      index++;
+    }
+    return '${preferred}_$index';
   }
 
   String get countryCode {

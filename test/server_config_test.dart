@@ -196,6 +196,81 @@ void main() {
   });
 
   group('prepareRuntimeConfig', () {
+    test('handles Remnawave injectHosts final config end-to-end', () {
+      const config = '''
+{
+  "remarks": "Virtual Host",
+  "dns": {"servers": ["1.1.1.1", "1.0.0.1"], "queryStrategy": "UseIP"},
+  "routing": {
+    "rules": [
+      {"protocol": ["bittorrent"], "outboundTag": "direct"},
+      {"network": "tcp,udp", "balancerTag": "Super_Balancer"}
+    ],
+    "balancers": [
+      {
+        "tag": "Super_Balancer",
+        "selector": ["proxy"],
+        "strategy": {
+          "type": "leastLoad",
+          "settings": {"maxRTT": "1s", "expected": 2, "baselines": ["1s"], "tolerance": 0.01}
+        },
+        "fallbackTag": "direct"
+      }
+    ],
+    "domainMatcher": "hybrid",
+    "domainStrategy": "IPIfNonMatch"
+  },
+  "inbounds": [
+    {"tag": "socks", "port": 10808, "listen": "127.0.0.1", "protocol": "socks", "settings": {"udp": true, "auth": "noauth"}},
+    {"tag": "http", "port": 10809, "listen": "127.0.0.1", "protocol": "http", "settings": {"allowTransparent": false}}
+  ],
+  "outbounds": [
+    {"tag": "proxy", "protocol": "vless", "settings": {"vnext": [{"address": "1.2.3.4", "port": 443, "users": [{"id": "11111111-2222-3333-4444-555555555555", "encryption": "none"}]}]}},
+    {"tag": "proxy-2", "protocol": "vless", "settings": {"vnext": [{"address": "5.6.7.8", "port": 443, "users": [{"id": "11111111-2222-3333-4444-555555555555", "encryption": "none"}]}]}},
+    {"tag": "proxy-3", "protocol": "vless", "settings": {"vnext": [{"address": "9.9.9.9", "port": 443, "users": [{"id": "11111111-2222-3333-4444-555555555555", "encryption": "none"}]}]}},
+    {"tag": "direct", "protocol": "freedom", "settings": {}},
+    {"tag": "block", "protocol": "blackhole", "settings": {}}
+  ],
+  "burstObservatory": {
+    "pingConfig": {
+      "timeout": "3s",
+      "interval": "1m",
+      "sampling": 1,
+      "destination": "http://www.gstatic.com/generate_204",
+      "connectivity": ""
+    },
+    "subjectSelector": ["proxy"]
+  }
+}
+''';
+
+      final profiles = FlutterVless.parseMany(config);
+      final server = ServerConfig.fromProfile(profiles.single);
+
+      expect(server, isNotNull);
+      expect(server!.remark, 'Virtual Host');
+      expect(server.address, '1.2.3.4');
+      expect(server.port, 443);
+      expect(server.config, contains('"balancers"'));
+
+      final runtime = ServerConfig.prepareRuntimeConfig(server.config);
+      final map = jsonDecode(runtime) as Map<String, dynamic>;
+      final routing = map['routing'] as Map<String, dynamic>;
+      final rules = (routing['rules'] as List).cast<Map>();
+
+      // Plugin injects socks_1/http_1 (config already owns socks/http tags).
+      for (final tag in ['socks', 'http', 'socks_1', 'http_1', 'socks-auth']) {
+        final rule = rules.firstWhere(
+          (r) => ((r['inboundTag'] as List?) ?? const []).contains(tag),
+        );
+        expect(rule['balancerTag'], 'Super_Balancer');
+      }
+      // The injectHosts outbounds keep prefix-matched by the balancer selector.
+      final balancer = (routing['balancers'] as List).cast<Map>().first;
+      expect(balancer['selector'], ['proxy']);
+      expect(map['burstObservatory'], isA<Map>());
+    });
+
     test('routes injected socks/http inbounds through the balancer', () {
       const config = '''
 {
@@ -241,7 +316,7 @@ void main() {
           .expand((e) => (e as List?) ?? const [])
           .toSet();
       expect(lbRules, containsAll(['in_proxy', 'socks', 'http', 'socks-auth']));
-      expect(rules.length, 15);
+      expect(rules.length, 5);
     });
 
     test('routes plugin-injected socks_1/http_1 inbounds through the balancer',
@@ -249,7 +324,8 @@ void main() {
       const config = '''
 {
   "inbounds": [
-    {"tag": "socks", "listen": "127.0.0.1", "port": 10808, "protocol": "socks"}
+    {"tag": "socks", "listen": "127.0.0.1", "port": 10808, "protocol": "socks"},
+    {"tag": "http", "listen": "127.0.0.1", "port": 10809, "protocol": "http"}
   ],
   "outbounds": [
     {"tag": "out_1", "protocol": "vless", "settings": {}},
@@ -258,7 +334,8 @@ void main() {
   ],
   "routing": {
     "rules": [
-      {"type": "field", "inboundTag": ["socks"], "balancerTag": "lb"}
+      {"type": "field", "inboundTag": ["socks"], "balancerTag": "lb"},
+      {"type": "field", "inboundTag": ["http"], "balancerTag": "lb"}
     ],
     "balancers": [
       {"tag": "lb", "selector": ["out_1", "out_2"], "strategy": {"type": "random"}}
@@ -272,7 +349,51 @@ void main() {
       final routing = map['routing'] as Map<String, dynamic>;
       final rules = (routing['rules'] as List).cast<Map>();
 
-      for (final tag in ['socks_1', 'socks_3', 'http_1', 'http_5']) {
+      for (final tag in ['socks_1', 'http_1']) {
+        final rule = rules.firstWhere(
+          (r) => ((r['inboundTag'] as List?) ?? const []).contains(tag),
+        );
+        expect(rule['balancerTag'], 'lb');
+      }
+    });
+
+    test('routes plugin-injected tags regardless of collision count', () {
+      const config = '''
+{
+  "inbounds": [
+    {"tag": "socks", "listen": "127.0.0.1", "port": 10801, "protocol": "socks"},
+    {"tag": "socks_1", "listen": "127.0.0.1", "port": 10802, "protocol": "socks"},
+    {"tag": "socks_2", "listen": "127.0.0.1", "port": 10803, "protocol": "socks"},
+    {"tag": "http", "listen": "127.0.0.1", "port": 10804, "protocol": "http"},
+    {"tag": "http_1", "listen": "127.0.0.1", "port": 10805, "protocol": "http"},
+    {"tag": "http_2", "listen": "127.0.0.1", "port": 10806, "protocol": "http"},
+    {"tag": "http_3", "listen": "127.0.0.1", "port": 10807, "protocol": "http"},
+    {"tag": "http_4", "listen": "127.0.0.1", "port": 10808, "protocol": "http"}
+  ],
+  "outbounds": [
+    {"tag": "out_1", "protocol": "vless", "settings": {}},
+    {"tag": "out_2", "protocol": "vless", "settings": {}},
+    {"tag": "direct", "protocol": "freedom", "settings": {}}
+  ],
+  "routing": {
+    "rules": [
+      {"type": "field", "inboundTag": ["socks"], "balancerTag": "lb"},
+      {"type": "field", "inboundTag": ["http"], "balancerTag": "lb"}
+    ],
+    "balancers": [
+      {"tag": "lb", "selector": ["out_1", "out_2"], "strategy": {"type": "random"}}
+    ]
+  }
+}
+''';
+
+      final result = ServerConfig.prepareRuntimeConfig(config);
+      final map = jsonDecode(result) as Map<String, dynamic>;
+      final routing = map['routing'] as Map<String, dynamic>;
+      final rules = (routing['rules'] as List).cast<Map>();
+
+      // Plugin picks the first free tag: socks_3 and http_5 here.
+      for (final tag in ['socks_3', 'http_5']) {
         final rule = rules.firstWhere(
           (r) => ((r['inboundTag'] as List?) ?? const []).contains(tag),
         );
