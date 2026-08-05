@@ -50,8 +50,7 @@ class SubscriptionService {
     try {
       final profiles = FlutterVless.parseMany(response.body);
       for (final profile in profiles) {
-        final link = profile.url;
-        final server = ServerConfig.fromLink(link);
+        final server = ServerConfig.fromProfile(profile);
         if (server != null) {
           servers.add(server);
         }
