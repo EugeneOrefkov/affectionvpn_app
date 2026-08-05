@@ -9,13 +9,17 @@ class ServerCard extends StatelessWidget {
     required this.server,
     this.selected = false,
     this.onTap,
+    this.onLongPress,
     this.trailing,
+    this.pingMethod = 'tcp',
   });
 
   final ServerConfig? server;
   final bool selected;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final Widget? trailing;
+  final String pingMethod;
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +28,7 @@ class ServerCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(14),
@@ -55,9 +60,7 @@ class ServerCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      item == null
-                          ? 'Не выбран'
-                          : '${item.address}:${item.port}',
+                      item == null ? 'Не выбран' : item.protocol,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -68,13 +71,8 @@ class ServerCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (item != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: _ProtocolBadge(protocol: item.protocol),
-                ),
               const SizedBox(width: 8),
-              _DelayBadge(delayMs: item?.delayMs),
+              _DelayBadge(delayMs: item?.delayMs, pingMethod: pingMethod),
               const SizedBox(width: 8),
               if (trailing != null)
                 trailing!
@@ -132,50 +130,37 @@ class _FlagBadge extends StatelessWidget {
   }
 }
 
-class _ProtocolBadge extends StatelessWidget {
-  const _ProtocolBadge({required this.protocol});
-
-  final String protocol;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        protocol.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.primary,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
 class _DelayBadge extends StatelessWidget {
-  const _DelayBadge({required this.delayMs});
+  const _DelayBadge({required this.delayMs, required this.pingMethod});
 
   final int? delayMs;
+  final String pingMethod;
 
   @override
   Widget build(BuildContext context) {
     if (delayMs == null || delayMs! <= 0) {
-      return const Icon(
-        Icons.hourglass_empty,
-        color: AppColors.textTertiary,
-        size: 18,
+      return const Text(
+        'н/д',
+        style: TextStyle(
+          color: AppColors.textTertiary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
       );
     }
-    final color = delayMs! < 150
-        ? AppColors.success
-        : delayMs! < 350
-            ? AppColors.warning
-            : AppColors.danger;
+    // HTTP GET measures the full tunnel path, so its healthy range is wider.
+    final isHttpGet = pingMethod == 'get';
+    final color = isHttpGet
+        ? delayMs! <= 600
+            ? AppColors.success
+            : delayMs! <= 1200
+                ? AppColors.warning
+                : AppColors.danger
+        : delayMs! < 150
+            ? AppColors.success
+            : delayMs! < 350
+                ? AppColors.warning
+                : AppColors.danger;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [

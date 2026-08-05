@@ -142,8 +142,14 @@ class _ServersScreenState extends State<ServersScreen> {
                           return ServerCard(
                             server: server,
                             selected: index == state.selectedIndex,
+                            pingMethod: state.pingMethod,
                             onTap: () {
                               context.read<AppState>().selectServer(index);
+                            },
+                            onLongPress: () {
+                              context
+                                  .read<AppState>()
+                                  .measureServerDelay(index);
                             },
                           );
                         },

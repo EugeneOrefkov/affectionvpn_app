@@ -120,6 +120,9 @@ class HomeScreen extends StatelessWidget {
                       child: _ServerCardSection(
                         server: server,
                         onTap: onOpenServers,
+                        onLongPress: () => context
+                            .read<AppState>()
+                            .measureServerDelay(state.selectedIndex),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -378,10 +381,15 @@ class _TrafficCard extends StatelessWidget {
 }
 
 class _ServerCardSection extends StatelessWidget {
-  const _ServerCardSection({required this.server, required this.onTap});
+  const _ServerCardSection({
+    required this.server,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   final ServerConfig? server;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -402,6 +410,8 @@ class _ServerCardSection extends StatelessWidget {
           child: ServerCard(
             server: server,
             selected: true,
+            pingMethod: context.read<AppState>().pingMethod,
+            onLongPress: onLongPress,
             trailing: const Icon(
               Icons.chevron_right,
               color: AppColors.textTertiary,

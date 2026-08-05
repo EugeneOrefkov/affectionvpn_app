@@ -214,6 +214,23 @@ class AppState extends ChangeNotifier {
         force: force,
       );
 
+  /// Measures a single server immediately (used by long-press on a server card).
+  Future<void> measureServerDelay(int index) async {
+    if (index < 0 || index >= _servers.length) {
+      return;
+    }
+    final server = _servers[index];
+    try {
+      final delay = await VpnService.instance
+          .measureServerDelay(server, method: _storage.pingMethod);
+      server.delayMs = delay;
+    } catch (_) {
+      server.delayMs = null;
+    }
+    server.delayCheckedAt = DateTime.now();
+    notifyListeners();
+  }
+
   Future<void> _measureDelays({
     required String method,
     bool force = false,
@@ -224,7 +241,7 @@ class AppState extends ChangeNotifier {
     _isMeasuringDelay = true;
     notifyListeners();
 
-    final concurrency = method == 'get' ? 4 : 16;
+    final concurrency = 16;
     var next = 0;
     final jobs = <Future<void>>[];
     for (var i = 0; i < concurrency && next < _servers.length; i++) {
