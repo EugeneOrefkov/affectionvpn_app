@@ -14,6 +14,7 @@ class StorageService {
   static const _kProxyOnly = 'proxy_only';
   static const _kAutoConnect = 'auto_connect';
   static const _kAutoSelectBest = 'auto_select_best';
+  static const _kLastUpdateCheck = 'last_update_check';
 
   late SharedPreferences _prefs;
 
@@ -76,6 +77,18 @@ class StorageService {
 
   Future<void> setAutoSelectBest(bool value) async {
     await _prefs.setBool(_kAutoSelectBest, value);
+  }
+
+  DateTime? get lastUpdateCheck {
+    final millis = _prefs.getInt(_kLastUpdateCheck);
+    if (millis == null) {
+      return null;
+    }
+    return DateTime.fromMillisecondsSinceEpoch(millis);
+  }
+
+  Future<void> setLastUpdateCheck(DateTime time) async {
+    await _prefs.setInt(_kLastUpdateCheck, time.millisecondsSinceEpoch);
   }
 
   Future<void> clearSubscription() async {

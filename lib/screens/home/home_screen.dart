@@ -10,9 +10,14 @@ import 'widgets/power_button.dart';
 import 'widgets/server_card.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.onOpenServers});
+  const HomeScreen({
+    super.key,
+    required this.onOpenServers,
+    required this.onOpenSettings,
+  });
 
   final VoidCallback onOpenServers;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +78,16 @@ class HomeScreen extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 child: Column(
                   children: [
+                    if (state.availableUpdate != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: _UpdateBanner(
+                          version: state.availableUpdate!.version,
+                          onTap: onOpenSettings,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     const SizedBox(height: 18),
                     const PowerButton(size: 210),
                     const SizedBox(height: 22),
@@ -146,6 +161,83 @@ class HomeScreen extends StatelessWidget {
       case ConnectionStatus.disconnected:
         return AppColors.textSecondary;
     }
+  }
+}
+
+class _UpdateBanner extends StatelessWidget {
+  const _UpdateBanner({required this.version, required this.onTap});
+
+  final String version;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Icon(
+                  Icons.system_update_alt,
+                  color: AppColors.primary,
+                  size: 17,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Доступно обновление',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Версия $version · обновить в настройках',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.danger,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(
+                Icons.chevron_right,
+                color: AppColors.textTertiary,
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

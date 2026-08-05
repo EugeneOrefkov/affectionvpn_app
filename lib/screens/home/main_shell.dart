@@ -32,8 +32,14 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final hasUpdate = state.availableUpdate != null;
+
     final pages = [
-      HomeScreen(onOpenServers: () => setState(() => _index = 1)),
+      HomeScreen(
+        onOpenServers: () => setState(() => _index = 1),
+        onOpenSettings: () => setState(() => _index = 2),
+      ),
       const ServersScreen(),
       const SettingsScreen(),
     ];
@@ -42,6 +48,7 @@ class _MainShellState extends State<MainShell> {
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: _BottomBar(
         index: _index,
+        settingsBadge: hasUpdate,
         onChanged: (i) => setState(() => _index = i),
       ),
     );
@@ -49,10 +56,15 @@ class _MainShellState extends State<MainShell> {
 }
 
 class _BottomBar extends StatelessWidget {
-  const _BottomBar({required this.index, required this.onChanged});
+  const _BottomBar({
+    required this.index,
+    required this.onChanged,
+    required this.settingsBadge,
+  });
 
   final int index;
   final ValueChanged<int> onChanged;
+  final bool settingsBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +101,7 @@ class _BottomBar extends StatelessWidget {
                 activeIcon: Icons.settings,
                 label: 'Настройки',
                 selected: index == 2,
+                badge: settingsBadge,
                 onTap: () => onChanged(2),
               ),
             ],
@@ -106,12 +119,14 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.badge = false,
   });
 
   final IconData icon;
   final IconData activeIcon;
   final String label;
   final bool selected;
+  final bool badge;
   final VoidCallback onTap;
 
   @override
@@ -131,10 +146,28 @@ class _NavItem extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                selected ? activeIcon : icon,
-                color: selected ? AppColors.primary : AppColors.textTertiary,
-                size: 22,
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    selected ? activeIcon : icon,
+                    color: selected ? AppColors.primary : AppColors.textTertiary,
+                    size: 22,
+                  ),
+                  if (badge)
+                    Positioned(
+                      top: -2,
+                      right: -3,
+                      child: Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(

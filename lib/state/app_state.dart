@@ -91,9 +91,25 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
     await VpnService.instance.initialize();
     notifyListeners();
-    unawaited(
-      checkForUpdates().catchError((_) => false),
+    unawaited(scheduledUpdateCheck());
+    _updateCheckTimer = Timer.periodic(
+      const Duration(hours: 4),
+      (_) => unawaited(scheduledUpdateCheck()),
     );
+  }
+
+  Timer? _updateCheckTimer;
+
+  Future<void> scheduledUpdateCheck() async {
+    final last = _storage.lastUpdateCheck;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(hours: 22)) {
+      return;
+    }
+    try {
+      await checkForUpdates();
+    } catch (_) {}
+    await _storage.setLastUpdateCheck(DateTime.now());
   }
 
   Future<void> addSubscription(String url) async {
@@ -391,6 +407,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _connectivitySub?.cancel();
+    _updateCheckTimer?.cancel();
     super.dispose();
   }
 }
