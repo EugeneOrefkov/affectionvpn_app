@@ -1,12 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/config/app_config.dart';
 import '../models/update_info.dart';
+import 'installer_service.dart';
+
+class UnknownSourceInstallException implements Exception {
+  const UnknownSourceInstallException();
+
+  @override
+  String toString() => 'Установка из неизвестных источников заблокирована';
+}
 
 class UpdateService {
   UpdateService._();
@@ -102,6 +112,17 @@ class UpdateService {
   }
 
   Future<void> install(String path) async {
+    try {
+      final installed = await InstallerService.instance.installApk(path);
+      if (installed) {
+        return;
+      }
+    } on PlatformException catch (e) {
+      _log('PackageInstaller failed: ${e.code} ${e.message}');
+    } catch (e) {
+      _log('PackageInstaller failed: $e');
+    }
+
     final result = await OpenFilex.open(
       path,
       type: 'application/vnd.android.package-archive',
@@ -114,10 +135,14 @@ class UpdateService {
       case ResultType.noAppToOpen:
         throw Exception('Установщик APK не найден');
       case ResultType.permissionDenied:
-        throw Exception('Нет разрешения на установку из этого источника');
+        throw const UnknownSourceInstallException();
       case ResultType.error:
         throw Exception('Не удалось запустить установщик');
     }
+  }
+
+  static void _log(String message) {
+    debugPrint(message);
   }
 
   String _normalizeVersion(String tag) {

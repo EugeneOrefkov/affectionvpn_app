@@ -25,6 +25,38 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Validate signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || \
+             [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || \
+             [ -z "$ANDROID_KEY_ALIAS" ] || \
+             [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::error::release signing secrets are not configured"
+            exit 1
+          fi
+
+      - name: Prepare signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          mkdir -p "$HOME/.gradle"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/affectionvpn-release.jks"
+          cat >> "$HOME/.gradle/gradle.properties" <<EOF
+AFFECTION_STORE_FILE=$RUNNER_TEMP/affectionvpn-release.jks
+AFFECTION_STORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD
+AFFECTION_KEY_ALIAS=$ANDROID_KEY_ALIAS
+AFFECTION_KEY_PASSWORD=$ANDROID_KEY_PASSWORD
+EOF
+
       - name: Build release APK
         run: |
           set -o pipefail
@@ -39,6 +71,16 @@ jobs:
             --build-number="$BUILD_CODE" 2>&1 | tee /tmp/build.log
         env:
           CI: "true"
+
+      - name: Verify APK signature
+        if: success()
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME" -name apksigner -type f 2>/dev/null | sort -V | tail -1)"
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+          else
+            echo "apksigner not found, skipping signature verification"
+          fi
 
       - name: Report build failure
         if: failure()

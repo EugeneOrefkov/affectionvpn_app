@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../services/installer_service.dart';
+import '../../../services/update_service.dart';
 import '../../../state/app_state.dart';
 
 class UpdateSection extends StatefulWidget {
@@ -55,12 +57,43 @@ class _UpdateSectionState extends State<UpdateSection> {
     final state = context.read<AppState>();
     try {
       await state.installUpdate();
+    } on UnknownSourceInstallException {
+      if (mounted) {
+        _showUnknownSourceGuide(context);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$e')),
         );
       }
+    }
+  }
+
+  Future<void> _showUnknownSourceGuide(BuildContext context) async {
+    final openSettings = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Разрешите установку'),
+        content: const Text(
+          'Android блокирует установку из неизвестных источников. '
+          'Разрешите установку для Affection VPN в настройках '
+          'и повторите установку обновления.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Открыть настройки'),
+          ),
+        ],
+      ),
+    );
+    if (openSettings == true) {
+      await InstallerService.instance.openUnknownSourcesSettings();
     }
   }
 
