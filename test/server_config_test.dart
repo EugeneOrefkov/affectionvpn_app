@@ -271,6 +271,75 @@ void main() {
       expect(map['burstObservatory'], isA<Map>());
     });
 
+    test('points burst observatory at a reliable probe URL', () {
+      const config = '''
+{
+  "inbounds": [
+    {"tag": "socks", "listen": "127.0.0.1", "port": 10808, "protocol": "socks"},
+    {"tag": "http", "listen": "127.0.0.1", "port": 10809, "protocol": "http"}
+  ],
+  "outbounds": [
+    {"tag": "proxy", "protocol": "vless", "settings": {}},
+    {"tag": "proxy-2", "protocol": "vless", "settings": {}},
+    {"tag": "direct", "protocol": "freedom", "settings": {}}
+  ],
+  "routing": {
+    "balancers": [
+      {
+        "tag": "Super_Balancer",
+        "selector": ["proxy"],
+        "strategy": {"type": "leastLoad", "settings": {}}
+      }
+    ],
+    "rules": []
+  },
+  "burstObservatory": {
+    "pingConfig": {
+      "timeout": "3s",
+      "interval": "1m",
+      "sampling": 1,
+      "destination": "http://www.gstatic.com/generate_204",
+      "connectivity": ""
+    },
+    "subjectSelector": ["proxy"]
+  }
+}
+''';
+
+      final result = ServerConfig.prepareRuntimeConfig(config);
+      final map = jsonDecode(result) as Map<String, dynamic>;
+      final pingConfig =
+          (map['burstObservatory'] as Map)['pingConfig'] as Map;
+      expect(pingConfig['destination'], ServerConfig.observatoryProbeUrl);
+      expect(pingConfig['interval'], '30s');
+      expect(pingConfig['timeout'], '5s');
+    });
+
+    test('adds a burst observatory for leastLoad balancers without one', () {
+      const config = '''
+{
+  "outbounds": [
+    {"tag": "proxy", "protocol": "vless", "settings": {}},
+    {"tag": "proxy-2", "protocol": "vless", "settings": {}},
+    {"tag": "direct", "protocol": "freedom", "settings": {}}
+  ],
+  "routing": {
+    "balancers": [
+      {"tag": "lb", "selector": ["proxy"], "strategy": {"type": "leastLoad"}}
+    ],
+    "rules": []
+  }
+}
+''';
+
+      final result = ServerConfig.prepareRuntimeConfig(config);
+      final map = jsonDecode(result) as Map<String, dynamic>;
+      final observatory = map['burstObservatory'] as Map;
+      final pingConfig = observatory['pingConfig'] as Map;
+      expect(pingConfig['destination'], ServerConfig.observatoryProbeUrl);
+      expect(observatory['subjectSelector'], ['proxy']);
+    });
+
     test('routes injected socks/http inbounds through the balancer', () {
       const config = '''
 {

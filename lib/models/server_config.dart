@@ -25,9 +25,31 @@ class ServerConfig {
 
   String get displayName {
     if (remark.trim().isNotEmpty) {
-      return remark.trim();
+      return _stripLeadingFlag(remark.trim());
     }
     return address;
+  }
+
+  /// Removes the country-flag emoji (e.g. "🇯🇵") that some panels prepend to
+  /// the remark, so the name is clean and the flag is hidden from the user.
+  static String _stripLeadingFlag(String value) {
+    var text = value;
+    while (true) {
+      final runes = text.runes;
+      if (runes.isEmpty) {
+        break;
+      }
+      if (_isRegionalIndicator(runes.first)) {
+        text = String.fromCharCodes(runes.skip(1));
+      } else {
+        break;
+      }
+    }
+    return text.trim();
+  }
+
+  static bool _isRegionalIndicator(int code) {
+    return code >= 0x1F1E6 && code < 0x1F1E6 + 26;
   }
 
   /// Xray config prepared for the native runtime.
@@ -109,10 +131,88 @@ class ServerConfig {
         });
       }
       routing['rules'] = rules;
+      _ensureHealthyObservatory(map, balancers);
       return jsonEncode(map);
     } catch (_) {
       return config;
     }
+  }
+
+  /// Reliable probe URL used by the observatory so balancer health data is
+  /// always fresh. Same endpoint as the app's ping probe.
+  static const observatoryProbeUrl = 'https://cp.cloudflare.com/generate_204';
+
+  /// Remnawave load-balancer nodes use the `leastLoad` strategy, which only
+  /// routes traffic while `burstObservatory` has ping data for the outbounds.
+  /// The observatory ships with `http://www.gstatic.com/generate_204` as the
+  /// destination, which is often blocked or slow, so it never collects data
+  /// and the whole balancer appears dead (no ping, no traffic). Point it at a
+  /// reliable HTTPS probe and refresh often to keep it healthy.
+  static void _ensureHealthyObservatory(
+    Map<String, dynamic> map,
+    List<dynamic> balancers,
+  ) {
+    final needsObservatory = balancers.any((b) {
+      if (b is! Map) {
+        return false;
+      }
+      final strategy = b['strategy'];
+      if (strategy is Map && strategy['type'] is String) {
+        return (strategy['type'] as String).toLowerCase() == 'leastload';
+      }
+      // Without an explicit strategy Xray still defaults to leastLoad.
+      return strategy == null;
+    });
+    if (!needsObservatory) {
+      return;
+    }
+    final observatory = map['burstObservatory'];
+    if (observatory is! Map) {
+      map['burstObservatory'] = {
+        'pingConfig': {
+          'timeout': '5s',
+          'interval': '30s',
+          'sampling': 2,
+          'destination': observatoryProbeUrl,
+          'connectivity': '',
+        },
+        'subjectSelector': [_balancerSelectorPrefix(balancers)],
+      };
+      return;
+    }
+    final pingConfig = observatory['pingConfig'];
+    if (pingConfig is Map) {
+      pingConfig['destination'] = observatoryProbeUrl;
+      pingConfig['timeout'] = '5s';
+      pingConfig['interval'] = '30s';
+      observatory['pingConfig'] = pingConfig;
+    } else {
+      observatory['pingConfig'] = {
+        'timeout': '5s',
+        'interval': '30s',
+        'sampling': 2,
+        'destination': observatoryProbeUrl,
+        'connectivity': '',
+      };
+    }
+    map['burstObservatory'] = observatory;
+  }
+
+  /// Prefix for the outbounds the balancer selects (e.g. selector `["proxy"]`
+  /// matches `proxy`, `proxy-2`, ...), reused as the observatory subject.
+  static String _balancerSelectorPrefix(List<dynamic> balancers) {
+    for (final balancer in balancers) {
+      if (balancer is Map) {
+        final selector = balancer['selector'];
+        if (selector is List && selector.isNotEmpty) {
+          final first = selector.first;
+          if (first is String && first.isNotEmpty) {
+            return first;
+          }
+        }
+      }
+    }
+    return 'outbound';
   }
 
   /// Mirrors the native plugin's `uniqueInboundTag`: the first free tag

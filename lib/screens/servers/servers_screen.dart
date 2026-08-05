@@ -143,6 +143,7 @@ class _ServersScreenState extends State<ServersScreen> {
                             server: server,
                             selected: index == state.selectedIndex,
                             pingMethod: state.pingMethod,
+                            isMeasuring: state.measuringIndex == index,
                             onTap: () {
                               context.read<AppState>().selectServer(index);
                             },

@@ -12,6 +12,7 @@ import '../models/subscription_info.dart';
 import '../models/update_info.dart';
 import '../services/storage_service.dart';
 import '../services/subscription_service.dart';
+import '../services/tunnel_http.dart';
 import '../services/update_service.dart';
 import '../services/vpn_service.dart';
 
@@ -44,6 +45,8 @@ class AppState extends ChangeNotifier {
   VlessStatus _status = VlessStatus();
   bool _isLoadingSubscription = false;
   bool _isMeasuringDelay = false;
+
+  int? _measuringIndex;
   bool _initialized = false;
 
   static const _autoSelectInterval = Duration(seconds: 60);
@@ -72,6 +75,8 @@ class AppState extends ChangeNotifier {
   VlessStatus get status => _status;
   bool get isLoadingSubscription => _isLoadingSubscription;
   bool get isMeasuringDelay => _isMeasuringDelay;
+
+  int? get measuringIndex => _measuringIndex;
   bool get isConnected => _connectionStatus == ConnectionStatus.connected;
 
   UpdateInfo? get availableUpdate => _availableUpdate;
@@ -219,6 +224,8 @@ class AppState extends ChangeNotifier {
     if (index < 0 || index >= _servers.length) {
       return;
     }
+    _measuringIndex = index;
+    notifyListeners();
     final server = _servers[index];
     try {
       final delay = await VpnService.instance
@@ -228,6 +235,7 @@ class AppState extends ChangeNotifier {
       server.delayMs = null;
     }
     server.delayCheckedAt = DateTime.now();
+    _measuringIndex = null;
     notifyListeners();
   }
 
@@ -387,6 +395,8 @@ class AppState extends ChangeNotifier {
         _storage.proxyLogin,
         _storage.proxyPassword,
       );
+    } else {
+      config = vpn.buildInternalSocksConfig(config);
     }
 
     _connectionStatus = ConnectionStatus.connecting;
@@ -406,11 +416,36 @@ class AppState extends ChangeNotifier {
     const chars =
         'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
     final random = Random.secure();
-    final password = List.generate(
-      12,
-      (_) => chars[random.nextInt(chars.length)],
-    ).join();
-    await _storage.setProxyCredentials('affection', password);
+    String generate() => List.generate(
+          6,
+          (_) => chars[random.nextInt(chars.length)],
+        ).join();
+    await _storage.setProxyCredentials(generate(), generate());
+  }
+
+  /// Local SOCKS endpoint the app uses to reach the tunnel (IP/speed widgets).
+  TunnelHttp get tunnelHttp {
+    if (proxyOnly) {
+      return TunnelHttp(
+        host: '127.0.0.1',
+        port: VpnService.proxyPort,
+        username: _storage.proxyLogin,
+        password: _storage.proxyPassword,
+      );
+    }
+    return TunnelHttp(
+      host: '127.0.0.1',
+      port: VpnService.instance.lastInternalSocksPort ??
+          VpnService.internalSocksPort,
+    );
+  }
+
+  /// Public IP visible through the active tunnel, or null when disconnected.
+  Future<String?> fetchCurrentIp() => tunnelHttp.fetchIp();
+
+  /// Download speed through the tunnel in Mbps, or null when unavailable.
+  Future<double?> measureSpeed({Duration duration = const Duration(seconds: 5)}) {
+    return tunnelHttp.measureMbps(duration: duration);
   }
 
   Future<void> refreshProxyHost() async {

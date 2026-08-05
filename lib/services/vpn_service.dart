@@ -63,6 +63,45 @@ class VpnService {
   static const _tcpProbeTimeout = Duration(seconds: 1);
   static const proxyPort = 10810;
 
+  /// Port of the app's internal loopback SOCKS inbound, injected into every
+  /// config (except proxy-only mode, which reuses [proxyPort]) so the app can
+  /// reach the internet through the tunnel for the IP/speed widgets.
+  static const internalSocksPort = 10900;
+
+  /// The actual port picked for the internal socks inbound by the last
+  /// [buildInternalSocksConfig] call.
+  int? lastInternalSocksPort;
+
+  /// Injects a no-auth SOCKS inbound on 127.0.0.1 used only by the app itself.
+  String buildInternalSocksConfig(String config) {
+    final map = jsonDecode(config) as Map<String, dynamic>;
+    final inbounds = <Map<String, dynamic>>[];
+    final usedPorts = <int>{};
+    for (final item in (map['inbounds'] as List? ?? const [])) {
+      if (item is Map) {
+        inbounds.add(Map<String, dynamic>.from(item));
+        final port = item['port'];
+        if (port is int) {
+          usedPorts.add(port);
+        }
+      }
+    }
+    var port = internalSocksPort;
+    while (usedPorts.contains(port)) {
+      port++;
+    }
+    lastInternalSocksPort = port;
+    inbounds.add({
+      'tag': 'socks-app',
+      'port': port,
+      'listen': '127.0.0.1',
+      'protocol': 'socks',
+      'settings': {'auth': 'noauth', 'udp': true},
+    });
+    map['inbounds'] = inbounds;
+    return jsonEncode(map);
+  }
+
   Future<int?> measureServerDelay(
     ServerConfig server, {
     required String method,

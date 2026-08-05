@@ -3,11 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
-import '../../models/server_config.dart';
 import '../../models/subscription_info.dart';
 import '../../state/app_state.dart';
 import 'widgets/power_button.dart';
-import 'widgets/server_card.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({
@@ -48,25 +46,13 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Affection VPN',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          'Ядро Xray · VLESS',
-                          style: TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Affection VPN',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   _StatusChip(connected: state.isConnected),
@@ -99,31 +85,37 @@ class HomeScreen extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      server == null
-                          ? 'Нет подключённого сервера'
-                          : '${server.displayName} · ${Formatters.duration(status.duration)}',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 22),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _TrafficRow(status: status),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _PingCard(
+                              delayMs: server?.delayMs,
+                              isMeasuring: state.measuringIndex ==
+                                  state.selectedIndex,
+                              onTap: () => context
+                                  .read<AppState>()
+                                  .measureServerDelay(state.selectedIndex),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _IpCard(connected: state.isConnected),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _SpeedtestCard(connected: state.isConnected),
                     ),
                     const SizedBox(height: 16),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _ServerCardSection(
-                        server: server,
-                        onTap: onOpenServers,
-                        onLongPress: () => context
-                            .read<AppState>()
-                            .measureServerDelay(state.selectedIndex),
-                      ),
+                      child: _TrafficRow(status: status),
                     ),
                     const SizedBox(height: 16),
                     Padding(
@@ -380,45 +372,271 @@ class _TrafficCard extends StatelessWidget {
   }
 }
 
-class _ServerCardSection extends StatelessWidget {
-  const _ServerCardSection({
-    required this.server,
+class _PingCard extends StatelessWidget {
+  const _PingCard({
+    required this.delayMs,
+    required this.isMeasuring,
     required this.onTap,
-    required this.onLongPress,
   });
 
-  final ServerConfig? server;
+  final int? delayMs;
+  final bool isMeasuring;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Текущий сервер',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 10),
-        GestureDetector(
-          onTap: onTap,
-          child: ServerCard(
-            server: server,
-            selected: true,
-            pingMethod: context.read<AppState>().pingMethod,
-            onLongPress: onLongPress,
-            trailing: const Icon(
-              Icons.chevron_right,
-              color: AppColors.textTertiary,
+    return _StatCard(
+      icon: Icons.network_ping,
+      label: 'Пинг',
+      onTap: onTap,
+      child: isMeasuring
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.accent,
+              ),
+            )
+          : Text(
+              delayMs == null || delayMs! <= 0 ? '—' : '$delayMs мс',
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+    );
+  }
+}
+
+class _IpCard extends StatefulWidget {
+  const _IpCard({required this.connected});
+
+  final bool connected;
+
+  @override
+  State<_IpCard> createState() => _IpCardState();
+}
+
+class _IpCardState extends State<_IpCard> {
+  String? _ip;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.connected) {
+      _load();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _IpCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.connected && !oldWidget.connected) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    if (_loading) {
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final ip = await context.read<AppState>().fetchCurrentIp();
+      if (mounted) {
+        setState(() => _ip = ip);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _StatCard(
+      icon: Icons.language,
+      label: 'IP адрес',
+      onTap: widget.connected ? _load : null,
+      child: _loading
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.accent,
+              ),
+            )
+          : Text(
+              _ip ?? '—',
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+    );
+  }
+}
+
+class _SpeedtestCard extends StatefulWidget {
+  const _SpeedtestCard({required this.connected});
+
+  final bool connected;
+
+  @override
+  State<_SpeedtestCard> createState() => _SpeedtestCardState();
+}
+
+class _SpeedtestCardState extends State<_SpeedtestCard> {
+  double? _mbps;
+  bool _loading = false;
+
+  Future<void> _run() async {
+    if (_loading) {
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _mbps = null;
+    });
+    try {
+      final mbps = await context
+          .read<AppState>()
+          .measureSpeed(duration: const Duration(seconds: 5));
+      if (mounted) {
+        setState(() => _mbps = mbps);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.speed, color: AppColors.accent, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Скорость',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _mbps == null
+                      ? 'Замер скорости'
+                      : '${_mbps!.toStringAsFixed(1)} Мбит/с',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
+          if (_loading)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.accent,
+              ),
+            )
+          else
+            Material(
+              color: AppColors.primary.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: widget.connected ? _run : null,
+                borderRadius: BorderRadius.circular(10),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Text(
+                    'Замерить',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.child,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: AppColors.accent, size: 15),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(height: 22, child: child),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
