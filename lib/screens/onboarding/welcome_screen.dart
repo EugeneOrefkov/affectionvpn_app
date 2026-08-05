@@ -83,7 +83,7 @@ class WelcomeScreen extends StatelessWidget {
                     icon: Icons.language,
                     color: AppColors.accent,
                     title: 'Серверы по всему миру',
-                    subtitle: 'Сотни локаций из одной подписки',
+                    subtitle: 'Множество локаций в одной подписке',
                   ),
                   const Spacer(),
                   FilledButton(
