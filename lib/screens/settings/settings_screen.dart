@@ -97,38 +97,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const _SectionTitle('Подписка'),
                   _Card(
                     children: [
-                      _InfoRow(
-                        icon: Icons.link,
-                        label: 'Ссылка на подписку',
-                        value: state.subscriptionUrl ?? '—',
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ActionButton(
-                              icon: Icons.refresh,
-                              label: 'Обновить',
-                              onTap: state.isLoadingSubscription
-                                  ? null
-                                  : _refresh,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.link,
+                              color: AppColors.primary,
+                              size: 20,
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _ActionButton(
-                              icon: Icons.edit,
-                              label: 'Заменить',
-                              onTap: () => _replaceSubscription(state),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Ссылка на подписку',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 13,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 10),
-                      _DangerButton(
-                        icon: Icons.delete_outline,
-                        label: 'Удалить подписку',
-                        onTap: _removeSubscription,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                        child: SelectableText(
+                          state.subscriptionUrl ?? '—',
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.refresh,
+                                label: 'Обновить',
+                                onTap: state.isLoadingSubscription
+                                    ? null
+                                    : _refresh,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.edit,
+                                label: 'Заменить',
+                                onTap: () => _replaceSubscription(state),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                        child: _DangerButton(
+                          icon: Icons.delete_outline,
+                          label: 'Удалить подписку',
+                          onTap: _removeSubscription,
+                        ),
                       ),
                     ],
                   ),
@@ -178,12 +212,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         icon: Icons.info_outline,
                         label: 'Версия приложения',
                         value: state.currentVersion,
-                      ),
-                      const Divider(height: 1),
-                      const _InfoRow(
-                        icon: Icons.privacy_tip_outlined,
-                        label: 'Протоколы',
-                        value: 'VLESS · VMess · Trojan · Shadowsocks',
                       ),
                     ],
                   ),

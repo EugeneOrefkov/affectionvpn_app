@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_vless/flutter_vless.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -19,7 +20,15 @@ class AppState extends ChangeNotifier {
     VpnService.instance.create(
       onStatusChanged: _onStatusChanged,
     );
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      if (results.contains(ConnectivityResult.none)) {
+        return;
+      }
+      unawaited(_measureDelays());
+    });
   }
+
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   final _storage = StorageService.instance;
   final _subscriptionService = SubscriptionService();
@@ -157,7 +166,7 @@ class AppState extends ChangeNotifier {
     _isMeasuringDelay = true;
     notifyListeners();
 
-    const concurrency = 4;
+    const concurrency = 16;
     var next = 0;
     final jobs = <Future<void>>[];
     for (var i = 0; i < concurrency && next < _servers.length; i++) {
@@ -185,7 +194,7 @@ class AppState extends ChangeNotifier {
         continue;
       }
       try {
-        final delay = await VpnService.instance.getServerDelay(server);
+        final delay = await VpnService.instance.measureServerDelay(server);
         server.delayMs = delay;
       } catch (_) {
         server.delayMs = null;
@@ -377,5 +386,11 @@ class AppState extends ChangeNotifier {
     _downloadedApkPath = null;
     _downloadProgress = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
   }
 }

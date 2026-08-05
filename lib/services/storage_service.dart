@@ -72,7 +72,7 @@ class StorageService {
     await _prefs.setBool(_kAutoConnect, value);
   }
 
-  bool get autoSelectBest => _prefs.getBool(_kAutoSelectBest) ?? true;
+  bool get autoSelectBest => _prefs.getBool(_kAutoSelectBest) ?? false;
 
   Future<void> setAutoSelectBest(bool value) async {
     await _prefs.setBool(_kAutoSelectBest, value);

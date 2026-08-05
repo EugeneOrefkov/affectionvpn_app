@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_vless/flutter_vless.dart';
 
 import '../models/server_config.dart';
@@ -45,4 +47,31 @@ class VpnService {
   }
 
   Future<String> getCoreVersion() => _vless.getCoreVersion();
+
+  static const _probeTimeout = Duration(seconds: 2);
+
+  Future<int?> measureServerDelay(ServerConfig server) {
+    if (server.address.isNotEmpty && server.port > 0) {
+      return measureTcpDelay(server.address, server.port);
+    }
+    return getServerDelay(server).then(
+      (delay) => delay > 0 ? delay : null,
+      onError: (_) => null,
+    );
+  }
+
+  Future<int?> measureTcpDelay(String address, int port) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final socket = await Socket.connect(
+        address,
+        port,
+        timeout: _probeTimeout,
+      );
+      await socket.close();
+      return stopwatch.elapsedMilliseconds;
+    } catch (_) {
+      return null;
+    }
+  }
 }
