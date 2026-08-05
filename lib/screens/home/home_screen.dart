@@ -80,7 +80,7 @@ class HomeScreen extends StatelessWidget {
                   children: [
                     if (state.availableUpdate != null) ...[
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                         child: _UpdateBanner(
                           version: state.availableUpdate!.version,
                           onTap: onOpenSettings,
