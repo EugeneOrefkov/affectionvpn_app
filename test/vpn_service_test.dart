@@ -4,6 +4,10 @@ import 'package:affection_vpn/services/vpn_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('probe URL is HTTPS (cleartext is blocked on Android)', () {
+    expect(VpnService.probeUrl, startsWith('https://'));
+  });
+
   test('buildAuthProxyConfig adds authenticated SOCKS5 inbound', () {
     const baseConfig =
         '{"inbounds":[{"tag":"in","port":10807,"protocol":"socks"}],'

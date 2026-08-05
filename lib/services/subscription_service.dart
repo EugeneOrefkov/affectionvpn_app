@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_vless/flutter_vless.dart';
 import 'package:http/http.dart' as http;
 
@@ -20,7 +21,21 @@ class SubscriptionService {
   static const _userAgent =
       'AffectionVPN/1.0 (Xray; VLESS)';
 
-  Future<SubscriptionResult> fetch(String url) async {
+  /// Headers used by Remnawave to identify the requesting device when the
+  /// device limit feature is enabled. Only `X-Hwid` is mandatory.
+  static Map<String, String> hwidHeaders(String deviceId) {
+    final platform = switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'Android',
+      TargetPlatform.iOS => 'iOS',
+      _ => 'Other',
+    };
+    return {
+      'X-Hwid': deviceId,
+      'X-Device-Os': platform,
+    };
+  }
+
+  Future<SubscriptionResult> fetch(String url, {String? deviceId}) async {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.hasScheme) {
       throw const FormatException('Некорректная ссылка на подписку');
@@ -32,6 +47,9 @@ class SubscriptionService {
     final request = http.Request('GET', uri);
     request.headers['User-Agent'] = _userAgent;
     request.headers['Accept'] = '*/*';
+    if (deviceId != null && deviceId.isNotEmpty) {
+      request.headers.addAll(hwidHeaders(deviceId));
+    }
 
     final streamed = await request.send().timeout(const Duration(seconds: 20));
     final response = await http.Response.fromStream(streamed);

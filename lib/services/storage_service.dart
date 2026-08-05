@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,6 +19,7 @@ class StorageService {
   static const _kProxyLogin = 'proxy_login';
   static const _kProxyPassword = 'proxy_password';
   static const _kPingMethod = 'ping_method';
+  static const _kDeviceId = 'device_id';
 
   late SharedPreferences _prefs;
 
@@ -107,6 +109,31 @@ class StorageService {
 
   Future<void> setPingMethod(String value) async {
     await _prefs.setString(_kPingMethod, value == 'tcp' ? 'tcp' : 'get');
+  }
+
+  /// Persistent device identifier reported to the subscription server as
+  /// `X-Hwid`. Generated once and reused so the server can track the device.
+  String? get deviceId => _prefs.getString(_kDeviceId);
+
+  Future<String> getOrCreateDeviceId() async {
+    final existing = _prefs.getString(_kDeviceId);
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+    final id = generateDeviceId();
+    await _prefs.setString(_kDeviceId, id);
+    return id;
+  }
+
+  /// Remnawave accepts HWIDs matching `^[a-zA-Z0-9=-]{10,64}$`.
+  static String generateDeviceId({int length = 32}) {
+    const alphabet =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789=-';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => alphabet[random.nextInt(alphabet.length)],
+    ).join();
   }
 
   Future<void> clearSubscription() async {

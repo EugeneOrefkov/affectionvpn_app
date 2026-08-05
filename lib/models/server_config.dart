@@ -35,8 +35,10 @@ class ServerConfig {
   /// Remnawave load-balancer nodes carry `routing.balancers`, but the native
   /// plugin injects its own local SOCKS/HTTP inbounds that are not matched by
   /// the original routing rules. Without extra rules the balancer is bypassed
-  /// and traffic always goes through the first outbound. This adds routing
-  /// rules so every local proxy inbound (including the injected ones) is
+  /// and device traffic always sticks to the first outbound (which may be a
+  /// dead/unreliable member of the pool, making the whole node look broken).
+  /// This adds routing rules so every local proxy inbound (the config's own,
+  /// the plugin-injected `socks`/`http`, and the auth proxy inbound) is
   /// balanced across the balancer's selector.
   String get runtimeConfig => prepareRuntimeConfig(config);
 
@@ -71,7 +73,18 @@ class ServerConfig {
             for (final tag in (rule['inboundTag'] as List? ?? const []))
               if (tag is String) tag,
       };
-      final tags = <String>{'socks', 'http', 'socks-auth'};
+      final tags = <String>{
+        'socks',
+        'http',
+        'socks-auth',
+        // The native plugin injects its own local SOCKS/HTTP inbounds when its
+        // fixed ports are free. Those are tagged `socks`/`http`, or
+        // `socks_1`/`http_1` (and up) when the imported config already uses the
+        // base tags. tun2socks always feeds the plugin-provided inbound, so the
+        // generated tags need balancer rules too.
+        for (var i = 1; i <= 5; i++) 'socks_$i',
+        for (var i = 1; i <= 5; i++) 'http_$i',
+      };
       final inbounds = map['inbounds'];
       if (inbounds is List) {
         for (final inbound in inbounds) {

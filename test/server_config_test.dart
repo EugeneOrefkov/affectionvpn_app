@@ -241,7 +241,43 @@ void main() {
           .expand((e) => (e as List?) ?? const [])
           .toSet();
       expect(lbRules, containsAll(['in_proxy', 'socks', 'http', 'socks-auth']));
-      expect(rules.length, 5);
+      expect(rules.length, 15);
+    });
+
+    test('routes plugin-injected socks_1/http_1 inbounds through the balancer',
+        () {
+      const config = '''
+{
+  "inbounds": [
+    {"tag": "socks", "listen": "127.0.0.1", "port": 10808, "protocol": "socks"}
+  ],
+  "outbounds": [
+    {"tag": "out_1", "protocol": "vless", "settings": {}},
+    {"tag": "out_2", "protocol": "vless", "settings": {}},
+    {"tag": "direct", "protocol": "freedom", "settings": {}}
+  ],
+  "routing": {
+    "rules": [
+      {"type": "field", "inboundTag": ["socks"], "balancerTag": "lb"}
+    ],
+    "balancers": [
+      {"tag": "lb", "selector": ["out_1", "out_2"], "strategy": {"type": "random"}}
+    ]
+  }
+}
+''';
+
+      final result = ServerConfig.prepareRuntimeConfig(config);
+      final map = jsonDecode(result) as Map<String, dynamic>;
+      final routing = map['routing'] as Map<String, dynamic>;
+      final rules = (routing['rules'] as List).cast<Map>();
+
+      for (final tag in ['socks_1', 'socks_3', 'http_1', 'http_5']) {
+        final rule = rules.firstWhere(
+          (r) => ((r['inboundTag'] as List?) ?? const []).contains(tag),
+        );
+        expect(rule['balancerTag'], 'lb');
+      }
     });
 
     test('leaves non-balancer configs untouched', () {

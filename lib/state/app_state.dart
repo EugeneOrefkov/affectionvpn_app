@@ -129,7 +129,10 @@ class AppState extends ChangeNotifier {
     _isLoadingSubscription = true;
     notifyListeners();
     try {
-      final result = await _subscriptionService.fetch(url);
+      final result = await _subscriptionService.fetch(
+        url,
+        deviceId: await _storage.getOrCreateDeviceId(),
+      );
       _subscriptionUrl = url.trim();
       _servers = result.servers;
       _subscriptionInfo = result.info;
@@ -157,7 +160,10 @@ class AppState extends ChangeNotifier {
     _isLoadingSubscription = true;
     notifyListeners();
     try {
-      final result = await _subscriptionService.fetch(url);
+      final result = await _subscriptionService.fetch(
+        url,
+        deviceId: await _storage.getOrCreateDeviceId(),
+      );
       _servers = result.servers;
       _subscriptionInfo = result.info;
       if (_selectedIndex >= _servers.length) {

@@ -57,7 +57,9 @@ class VpnService {
   static const proxyPort = 10810;
 
   /// Lightweight endpoint reachable in most regions; returns 204.
-  static const probeUrl = 'http://cp.cloudflare.com/generate_204';
+  /// HTTPS is required: the probe runs through the native `HttpURLConnection`
+  /// and Android blocks cleartext to non-loopback hosts by default.
+  static const probeUrl = 'https://cp.cloudflare.com/generate_204';
 
   Future<int?> measureServerDelay(
     ServerConfig server, {
