@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import 'agreement_screen.dart';
 import 'subscription_input_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -111,10 +112,40 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  const Text(
-                    'Нажимая, вы соглашаетесь с условиями использования',
+                  RichText(
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                    text: const TextSpan(
+                      style: TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'Нажимая, вы соглашаетесь с условиями ',
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AgreementScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Пользовательского соглашения',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.accent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
                 ],

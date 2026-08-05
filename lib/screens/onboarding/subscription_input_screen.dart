@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../state/app_state.dart';
@@ -87,6 +88,14 @@ class _SubscriptionInputScreenState extends State<SubscriptionInputScreen> {
     );
   }
 
+  Future<void> _openCabinet() async {
+    final uri = Uri.parse('https://cabinet.affectiion.ru');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok) {
+      _showError('Не удалось открыть ссылку');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -98,27 +107,6 @@ class _SubscriptionInputScreenState extends State<SubscriptionInputScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 20),
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  gradient: AppColors.gradient,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.glowPrimary,
-                      blurRadius: 30,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.link,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(height: 24),
               const Text(
                 'Вставьте ссылку на подписку',
                 style: TextStyle(
@@ -129,9 +117,29 @@ class _SubscriptionInputScreenState extends State<SubscriptionInputScreen> {
               ),
               const SizedBox(height: 10),
               const Text(
-                'Ссылка выдаётся вашим провайдером VPN-сервиса '
-                '(Remnawave / Marzban). После импорта все серверы '
-                'появятся в приложении автоматически.',
+                'Ссылку на подписку можно получить в личном кабинете Affection VPN:',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 6),
+              InkWell(
+                onTap: _openCabinet,
+                child: const Text(
+                  'https://cabinet.affectiion.ru',
+                  style: TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'После импорта все серверы появятся в приложении автоматически.',
                 style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 14,
@@ -144,7 +152,7 @@ class _SubscriptionInputScreenState extends State<SubscriptionInputScreen> {
                 keyboardType: TextInputType.url,
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText: 'https://example.com/sub/xxxxxxxx',
+                  hintText: 'https://sub.affectiion.ru/xxxxxx',
                   suffixIcon: IconButton(
                     onPressed: _paste,
                     tooltip: 'Вставить',
