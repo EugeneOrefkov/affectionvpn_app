@@ -53,13 +53,15 @@ class VpnService {
 
   Future<String> getCoreVersion() => _vless.getCoreVersion();
 
-  static const _probeTimeout = Duration(seconds: 2);
-  static const proxyPort = 10810;
-
   /// Lightweight endpoint reachable in most regions; returns 204.
   /// HTTPS is required: the probe runs through the native `HttpURLConnection`
   /// and Android blocks cleartext to non-loopback hosts by default.
   static const probeUrl = 'https://cp.cloudflare.com/generate_204';
+
+  /// TCP connect is a fast latency probe (network RTT, no tunnel overhead).
+  /// Servers that do not answer within this window are treated as unreachable.
+  static const _tcpProbeTimeout = Duration(seconds: 1);
+  static const proxyPort = 10810;
 
   Future<int?> measureServerDelay(
     ServerConfig server, {
@@ -128,7 +130,7 @@ class VpnService {
       final socket = await Socket.connect(
         address,
         port,
-        timeout: _probeTimeout,
+        timeout: _tcpProbeTimeout,
       );
       await socket.close();
       return stopwatch.elapsedMilliseconds;

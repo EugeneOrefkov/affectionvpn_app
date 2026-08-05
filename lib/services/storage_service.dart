@@ -105,7 +105,7 @@ class StorageService {
     await _prefs.setString(_kProxyPassword, password);
   }
 
-  String get pingMethod => _prefs.getString(_kPingMethod) == 'tcp' ? 'tcp' : 'get';
+  String get pingMethod => _prefs.getString(_kPingMethod) == 'get' ? 'get' : 'tcp';
 
   Future<void> setPingMethod(String value) async {
     await _prefs.setString(_kPingMethod, value == 'tcp' ? 'tcp' : 'get');

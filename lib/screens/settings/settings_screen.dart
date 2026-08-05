@@ -6,7 +6,6 @@ import '../../core/theme/app_colors.dart';
 import '../../services/vpn_service.dart';
 import '../../state/app_state.dart';
 import '../onboarding/subscription_input_screen.dart';
-import '../onboarding/welcome_screen.dart';
 import 'widgets/update_section.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -33,43 +32,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() => _coreVersion = match?.group(1) ?? version.trim());
       }
     } catch (_) {}
-  }
-
-  Future<void> _removeSubscription() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить подписку?'),
-        content: const Text(
-          'Все сохранённые серверы будут удалены. '
-          'Вы сможете добавить подписку позже.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Удалить',
-              style: TextStyle(color: AppColors.danger),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
-    await context.read<AppState>().removeSubscription();
-    if (!mounted) {
-      return;
-    }
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-      (route) => false,
-    );
   }
 
   @override
@@ -156,14 +118,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ),
                           ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
-                        child: _DangerButton(
-                          icon: Icons.delete_outline,
-                          label: 'Удалить подписку',
-                          onTap: _removeSubscription,
                         ),
                       ),
                     ],
@@ -571,7 +525,7 @@ class _PingMethodSelector extends StatelessWidget {
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'GET — реальная проверка через прокси',
+                      'TCP — быстрое измерение; GET — точная проверка через прокси',
                       style: TextStyle(
                         color: AppColors.textTertiary,
                         fontSize: 12,
@@ -587,17 +541,17 @@ class _PingMethodSelector extends StatelessWidget {
             children: [
               Expanded(
                 child: _MethodChip(
-                  label: 'HTTP GET',
-                  selected: value == 'get',
-                  onTap: () => onChanged('get'),
+                  label: 'TCP',
+                  selected: value == 'tcp',
+                  onTap: () => onChanged('tcp'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _MethodChip(
-                  label: 'TCP',
-                  selected: value == 'tcp',
-                  onTap: () => onChanged('tcp'),
+                  label: 'HTTP GET',
+                  selected: value == 'get',
+                  onTap: () => onChanged('get'),
                 ),
               ),
             ],
@@ -669,35 +623,6 @@ class _ActionButton extends StatelessWidget {
         foregroundColor: AppColors.textPrimary,
         backgroundColor: AppColors.surfaceAlt,
         side: const BorderSide(color: AppColors.border),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
-  }
-}
-
-class _DangerButton extends StatelessWidget {
-  const _DangerButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, size: 16),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.danger,
-        side: BorderSide(color: AppColors.danger.withValues(alpha: 0.4)),
         padding: const EdgeInsets.symmetric(vertical: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),

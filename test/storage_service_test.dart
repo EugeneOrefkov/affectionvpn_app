@@ -31,4 +31,15 @@ void main() {
     expect(storage.deviceId, first);
     expect(hwidRegex.hasMatch(first), isTrue);
   });
+
+  test('ping method defaults to fast TCP probe', () async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = StorageService.instance;
+    await storage.init();
+
+    expect(storage.pingMethod, 'tcp');
+
+    await storage.setPingMethod('get');
+    expect(storage.pingMethod, 'get');
+  });
 }
