@@ -17,6 +17,7 @@ class StorageService {
   static const _kLastUpdateCheck = 'last_update_check';
   static const _kProxyLogin = 'proxy_login';
   static const _kProxyPassword = 'proxy_password';
+  static const _kPingMethod = 'ping_method';
 
   late SharedPreferences _prefs;
 
@@ -100,6 +101,12 @@ class StorageService {
   Future<void> setProxyCredentials(String login, String password) async {
     await _prefs.setString(_kProxyLogin, login);
     await _prefs.setString(_kProxyPassword, password);
+  }
+
+  String get pingMethod => _prefs.getString(_kPingMethod) == 'tcp' ? 'tcp' : 'get';
+
+  Future<void> setPingMethod(String value) async {
+    await _prefs.setString(_kPingMethod, value == 'tcp' ? 'tcp' : 'get');
   }
 
   Future<void> clearSubscription() async {

@@ -180,6 +180,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onChanged: state.setAutoSelectBest,
                       ),
                       const Divider(height: 1),
+                      _PingMethodSelector(
+                        value: state.pingMethod,
+                        onChanged: state.setPingMethod,
+                      ),
+                      const Divider(height: 1),
                       _SwitchRow(
                         icon: Icons.autorenew,
                         title: 'Автоподключение',
@@ -523,6 +528,121 @@ class _SwitchRow extends StatelessWidget {
           ),
           Switch(value: value, onChanged: onChanged),
         ],
+      ),
+    );
+  }
+}
+
+class _PingMethodSelector extends StatelessWidget {
+  const _PingMethodSelector({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.network_check,
+                color: AppColors.accent,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Метод проверки пинга',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'GET — реальная проверка через прокси',
+                      style: TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MethodChip(
+                  label: 'HTTP GET',
+                  selected: value == 'get',
+                  onTap: () => onChanged('get'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MethodChip(
+                  label: 'TCP',
+                  selected: value == 'tcp',
+                  onTap: () => onChanged('tcp'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MethodChip extends StatelessWidget {
+  const _MethodChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withValues(alpha: 0.14) : AppColors.surfaceAlt,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? AppColors.primary : AppColors.textSecondary,
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+          ),
+        ),
       ),
     );
   }

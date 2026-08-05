@@ -194,4 +194,69 @@ void main() {
     expect(servers[1].remark, '🇩🇪 DE LoadBalancer');
     expect(servers[1].config, contains('"balancers"'));
   });
+
+  group('prepareRuntimeConfig', () {
+    test('routes injected socks/http inbounds through the balancer', () {
+      const config = '''
+{
+  "log": {"loglevel": "warning"},
+  "inbounds": [
+    {"tag": "in_proxy", "listen": "127.0.0.1", "port": 10807, "protocol": "socks"}
+  ],
+  "outbounds": [
+    {"tag": "out_1", "protocol": "vless", "settings": {}},
+    {"tag": "out_2", "protocol": "vless", "settings": {}},
+    {"tag": "direct", "protocol": "freedom", "settings": {}}
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {"type": "field", "inboundTag": ["in_proxy"], "balancerTag": "lb"},
+      {"type": "field", "ip": ["geoip:private"], "outboundTag": "direct"}
+    ],
+    "balancers": [
+      {"tag": "lb", "selector": ["out_1", "out_2"], "strategy": {"type": "random"}}
+    ]
+  }
+}
+''';
+
+      final result = ServerConfig.prepareRuntimeConfig(config);
+      final map = jsonDecode(result) as Map<String, dynamic>;
+      final routing = map['routing'] as Map<String, dynamic>;
+      final rules = (routing['rules'] as List).cast<Map>();
+
+      final socksRule = rules.firstWhere(
+        (r) => ((r['inboundTag'] as List?) ?? const []).contains('socks'),
+      );
+      expect(socksRule['balancerTag'], 'lb');
+      final httpRule = rules.firstWhere(
+        (r) => ((r['inboundTag'] as List?) ?? const []).contains('http'),
+      );
+      expect(httpRule['balancerTag'], 'lb');
+
+      final lbRules = rules
+          .where((r) => r['balancerTag'] == 'lb')
+          .map((r) => r['inboundTag'])
+          .expand((e) => (e as List?) ?? const [])
+          .toSet();
+      expect(lbRules, containsAll(['in_proxy', 'socks', 'http', 'socks-auth']));
+      expect(rules.length, 5);
+    });
+
+    test('leaves non-balancer configs untouched', () {
+      const config = '''
+{
+  "inbounds": [{"tag": "in", "port": 10807, "protocol": "socks"}],
+  "outbounds": [{"tag": "proxy", "protocol": "vless", "settings": {}}],
+  "routing": {"rules": [{"type": "field", "inboundTag": ["in"], "outboundTag": "proxy"}]}
+}
+''';
+      expect(ServerConfig.prepareRuntimeConfig(config), config);
+    });
+
+    test('handles malformed JSON gracefully', () {
+      expect(ServerConfig.prepareRuntimeConfig('not json'), 'not json');
+    });
+  });
 }

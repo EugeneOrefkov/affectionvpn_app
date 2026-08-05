@@ -26,7 +26,7 @@ class AppState extends ChangeNotifier {
       if (results.contains(ConnectivityResult.none)) {
         return;
       }
-      unawaited(_measureDelays());
+      unawaited(_measureDelays(method: 'tcp'));
       unawaited(refreshProxyHost());
     });
   }
@@ -74,6 +74,7 @@ class AppState extends ChangeNotifier {
   bool get proxyOnly => _storage.proxyOnly;
   bool get autoConnect => _storage.autoConnect;
   bool get autoSelectBest => _storage.autoSelectBest;
+  String get pingMethod => _storage.pingMethod;
 
   String get proxyLogin => _storage.proxyLogin;
   String get proxyPassword => _storage.proxyPassword;
@@ -139,7 +140,7 @@ class AppState extends ChangeNotifier {
       _connectionStatus = ConnectionStatus.disconnected;
       await _stopIfNeeded();
       notifyListeners();
-      unawaited(_measureDelays());
+      unawaited(_measureDelays(method: 'tcp'));
     } catch (e) {
       rethrow;
     } finally {
@@ -164,7 +165,7 @@ class AppState extends ChangeNotifier {
       }
       await _storage.setServers(_servers);
       notifyListeners();
-      unawaited(_measureDelays());
+      unawaited(_measureDelays(method: 'tcp'));
     } catch (e) {
       rethrow;
     } finally {
@@ -173,29 +174,40 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void selectServer(int index) {
-    if (index < 0 || index >= _servers.length) {
+  Future<void> selectServer(int index) async {
+    if (index < 0 || index >= _servers.length || index == _selectedIndex) {
       return;
     }
     _selectedIndex = index;
     _storage.setSelectedServerIndex(index);
     notifyListeners();
+    if (_connectionStatus == ConnectionStatus.connected ||
+        _connectionStatus == ConnectionStatus.connecting) {
+      await _stopIfNeeded();
+      await _connect();
+    }
   }
 
-  Future<void> measureDelays() => _measureDelays();
+  Future<void> measureDelays({bool force = false}) => _measureDelays(
+        method: _storage.pingMethod,
+        force: force,
+      );
 
-  Future<void> _measureDelays() async {
+  Future<void> _measureDelays({
+    required String method,
+    bool force = false,
+  }) async {
     if (_isMeasuringDelay) {
       return;
     }
     _isMeasuringDelay = true;
     notifyListeners();
 
-    const concurrency = 16;
+    final concurrency = method == 'get' ? 4 : 16;
     var next = 0;
     final jobs = <Future<void>>[];
     for (var i = 0; i < concurrency && next < _servers.length; i++) {
-      jobs.add(_delayWorker(() => next++));
+      jobs.add(_delayWorker(() => next++, force: force, method: method));
     }
     await Future.wait(jobs);
 
@@ -206,7 +218,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _delayWorker(int Function() next) async {
+  Future<void> _delayWorker(
+    int Function() next, {
+    required bool force,
+    required String method,
+  }) async {
     while (true) {
       final index = next();
       if (index >= _servers.length) {
@@ -214,12 +230,14 @@ class AppState extends ChangeNotifier {
       }
       final server = _servers[index];
       final now = DateTime.now();
-      if (server.delayCheckedAt != null &&
+      if (!force &&
+          server.delayCheckedAt != null &&
           now.difference(server.delayCheckedAt!) < const Duration(minutes: 2)) {
         continue;
       }
       try {
-        final delay = await VpnService.instance.measureServerDelay(server);
+        final delay = await VpnService.instance
+            .measureServerDelay(server, method: method);
         server.delayMs = delay;
       } catch (_) {
         server.delayMs = null;
@@ -272,7 +290,7 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    var config = server.config;
+    var config = server.runtimeConfig;
     if (proxyOnly) {
       await _ensureProxyCredentials();
       await refreshProxyHost();
@@ -380,6 +398,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> setAutoSelectBest(bool value) async {
     await _storage.setAutoSelectBest(value);
+    notifyListeners();
+  }
+
+  Future<void> setPingMethod(String value) async {
+    await _storage.setPingMethod(value);
     notifyListeners();
   }
 

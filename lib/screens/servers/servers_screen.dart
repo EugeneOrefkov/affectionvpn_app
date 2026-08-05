@@ -69,7 +69,9 @@ class _ServersScreenState extends State<ServersScreen> {
                     ),
                   ),
                   IconButton(
-                    onPressed: state.isMeasuringDelay ? null : state.measureDelays,
+                    onPressed: state.isMeasuringDelay
+                        ? null
+                        : () => state.measureDelays(force: true),
                     tooltip: 'Проверить пинг',
                     icon: state.isMeasuringDelay
                         ? const SizedBox(

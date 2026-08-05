@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_vless/flutter_vless.dart';
 
 class ServerConfig {
@@ -26,6 +28,79 @@ class ServerConfig {
       return remark.trim();
     }
     return address;
+  }
+
+  /// Xray config prepared for the native runtime.
+  ///
+  /// Remnawave load-balancer nodes carry `routing.balancers`, but the native
+  /// plugin injects its own local SOCKS/HTTP inbounds that are not matched by
+  /// the original routing rules. Without extra rules the balancer is bypassed
+  /// and traffic always goes through the first outbound. This adds routing
+  /// rules so every local proxy inbound (including the injected ones) is
+  /// balanced across the balancer's selector.
+  String get runtimeConfig => prepareRuntimeConfig(config);
+
+  static String prepareRuntimeConfig(String config) {
+    try {
+      final map = jsonDecode(config) as Map<String, dynamic>;
+      final routing = map['routing'];
+      if (routing is! Map) {
+        return config;
+      }
+      final balancers = routing['balancers'];
+      if (balancers is! List || balancers.isEmpty) {
+        return config;
+      }
+      String? balancerTag;
+      for (final balancer in balancers) {
+        if (balancer is Map) {
+          final tag = balancer['tag'];
+          if (tag is String && tag.isNotEmpty) {
+            balancerTag = tag;
+            break;
+          }
+        }
+      }
+      if (balancerTag == null) {
+        return config;
+      }
+      final rules = (routing['rules'] as List? ?? []).toList();
+      final existingTags = <String>{
+        for (final rule in rules)
+          if (rule is Map)
+            for (final tag in (rule['inboundTag'] as List? ?? const []))
+              if (tag is String) tag,
+      };
+      final tags = <String>{'socks', 'http', 'socks-auth'};
+      final inbounds = map['inbounds'];
+      if (inbounds is List) {
+        for (final inbound in inbounds) {
+          if (inbound is Map) {
+            final protocol = inbound['protocol'];
+            if (protocol == 'socks' || protocol == 'http') {
+              final tag = inbound['tag'];
+              if (tag is String && tag.isNotEmpty) {
+                tags.add(tag);
+              }
+            }
+          }
+        }
+      }
+      for (final tag in tags) {
+        if (existingTags.contains(tag)) {
+          continue;
+        }
+        rules.add({
+          'type': 'field',
+          'inboundTag': [tag],
+          'balancerTag': balancerTag,
+        });
+      }
+      routing['rules'] = rules;
+      return jsonEncode(map);
+    } catch (_) {
+      return config;
+    }
   }
 
   String get countryCode {

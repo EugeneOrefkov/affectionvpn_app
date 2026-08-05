@@ -44,17 +44,39 @@ class VpnService {
   Future<void> stop() => _vless.stopVless();
 
   Future<int> getServerDelay(ServerConfig server) {
-    return _vless.getServerDelay(config: server.config);
+    return _vless.getServerDelay(config: server.runtimeConfig, url: probeUrl);
   }
 
   Future<int> getConnectedServerDelay() {
-    return _vless.getConnectedServerDelay();
+    return _vless.getConnectedServerDelay(url: probeUrl);
   }
 
   Future<String> getCoreVersion() => _vless.getCoreVersion();
 
   static const _probeTimeout = Duration(seconds: 2);
   static const proxyPort = 10810;
+
+  /// Lightweight endpoint reachable in most regions; returns 204.
+  static const probeUrl = 'http://cp.cloudflare.com/generate_204';
+
+  Future<int?> measureServerDelay(
+    ServerConfig server, {
+    required String method,
+  }) {
+    if (method == 'get') {
+      return getServerDelay(server).then(
+        (delay) => delay > 0 ? delay : null,
+        onError: (_) => null,
+      );
+    }
+    if (server.address.isNotEmpty && server.port > 0) {
+      return measureTcpDelay(server.address, server.port);
+    }
+    return getServerDelay(server).then(
+      (delay) => delay > 0 ? delay : null,
+      onError: (_) => null,
+    );
+  }
 
   String buildAuthProxyConfig(
     String config,
@@ -96,16 +118,6 @@ class VpnService {
     });
     map['inbounds'] = inbounds;
     return jsonEncode(map);
-  }
-
-  Future<int?> measureServerDelay(ServerConfig server) {
-    if (server.address.isNotEmpty && server.port > 0) {
-      return measureTcpDelay(server.address, server.port);
-    }
-    return getServerDelay(server).then(
-      (delay) => delay > 0 ? delay : null,
-      onError: (_) => null,
-    );
   }
 
   Future<int?> measureTcpDelay(String address, int port) async {
