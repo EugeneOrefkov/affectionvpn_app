@@ -16,12 +16,23 @@ class TunnelHttp {
     required this.port,
     this.username,
     this.password,
-  });
+  }) : direct = false;
+
+  /// Direct client: connects straight to the target host, skipping the local
+  /// SOCKS proxy. Used when the tunnel is off, e.g. to show the real IP and
+  /// measure the plain internet speed.
+  TunnelHttp.direct()
+      : host = '',
+        port = 0,
+        username = null,
+        password = null,
+        direct = true;
 
   final String host;
   final int port;
   final String? username;
   final String? password;
+  final bool direct;
 
   static const _connectTimeout = Duration(seconds: 6);
   static const _ipUrl = 'http://checkip.amazonaws.com';
@@ -122,15 +133,24 @@ class TunnelHttp {
         '\r\n'));
   }
 
-  /// Opens a SOCKS5 connection to the target host of [url]. The caller owns
-  /// the returned socket and must close it; [reader] stays attached for the
-  /// whole lifetime of the socket (sockets cannot be re-listened after cancel).
+  /// Opens the connection to the target host of [url]. In [direct] mode it is
+  /// a plain TCP connection; otherwise a SOCKS5 connection through the local
+  /// tunnel. The caller owns the returned socket and must close it; [reader]
+  /// stays attached for the whole lifetime of the socket (sockets cannot be
+  /// re-listened after cancel).
   Future<({Socket socket, _BufferedReader reader})> _connect(String url) async {
     final uri = Uri.parse(url);
-    final socket = await Socket.connect(host, port, timeout: _connectTimeout);
+    final targetPort = uri.hasPort ? uri.port : 80;
+    final socket = await Socket.connect(
+      direct ? uri.host : host,
+      direct ? targetPort : port,
+      timeout: _connectTimeout,
+    );
     try {
       final reader = _BufferedReader(socket);
-      await _socksHandshake(socket, reader, uri.host, uri.hasPort ? uri.port : 80);
+      if (!direct) {
+        await _socksHandshake(socket, reader, uri.host, targetPort);
+      }
       return (socket: socket, reader: reader);
     } catch (_) {
       socket.destroy();

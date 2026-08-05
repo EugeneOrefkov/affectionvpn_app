@@ -249,7 +249,10 @@ class AppState extends ChangeNotifier {
     _isMeasuringDelay = true;
     notifyListeners();
 
-    final concurrency = 16;
+    // TCP probes are cheap and cancellable, so fire every server at once and
+    // the whole sweep ends within a single probe timeout (~1s). The native
+    // GET probe starts a core per server, so keep its pool small.
+    final concurrency = method == 'tcp' ? _servers.length.clamp(1, 128) : 16;
     var next = 0;
     final jobs = <Future<void>>[];
     for (var i = 0; i < concurrency && next < _servers.length; i++) {
@@ -423,8 +426,14 @@ class AppState extends ChangeNotifier {
     await _storage.setProxyCredentials(generate(), generate());
   }
 
-  /// Local SOCKS endpoint the app uses to reach the tunnel (IP/speed widgets).
-  TunnelHttp get tunnelHttp {
+  /// Client for the IP/speed widgets. When the tunnel is up it goes through
+  /// the app's local SOCKS inbound (auth proxy mode reuses [VpnService.proxyPort]);
+  /// when the tunnel is off it connects directly, which yields the real IP and
+  /// the plain internet speed.
+  TunnelHttp get _networkHttp {
+    if (!isConnected) {
+      return TunnelHttp.direct();
+    }
     if (proxyOnly) {
       return TunnelHttp(
         host: '127.0.0.1',
@@ -440,12 +449,14 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  /// Public IP visible through the active tunnel, or null when disconnected.
-  Future<String?> fetchCurrentIp() => tunnelHttp.fetchIp();
+  /// Public IP visible from the network (through the tunnel when connected,
+  /// otherwise the real IP). Null on any failure.
+  Future<String?> fetchCurrentIp() => _networkHttp.fetchIp();
 
-  /// Download speed through the tunnel in Mbps, or null when unavailable.
+  /// Download speed in Mbps (through the tunnel when connected, otherwise the
+  /// plain internet speed). Null on failure.
   Future<double?> measureSpeed({Duration duration = const Duration(seconds: 5)}) {
-    return tunnelHttp.measureMbps(duration: duration);
+    return _networkHttp.measureMbps(duration: duration);
   }
 
   Future<void> refreshProxyHost() async {

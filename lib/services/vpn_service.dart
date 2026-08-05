@@ -60,7 +60,9 @@ class VpnService {
 
   /// TCP connect is a fast latency probe (network RTT, no tunnel overhead).
   /// Servers that do not answer within this window are treated as unreachable.
-  static const _tcpProbeTimeout = Duration(seconds: 1);
+  /// Because all probes run concurrently, the whole sweep finishes within one
+  /// probe timeout.
+  static const _tcpProbeTimeout = Duration(milliseconds: 900);
   static const proxyPort = 10810;
 
   /// Port of the app's internal loopback SOCKS inbound, injected into every
@@ -165,15 +167,17 @@ class VpnService {
 
   Future<int?> measureTcpDelay(String address, int port) async {
     final stopwatch = Stopwatch()..start();
+    // startConnect returns a cancellable ConnectionTask, so a probe that hits
+    // the timeout is torn down immediately and does not leave a half-open
+    // socket behind. Combined with measuring every server concurrently this
+    // bounds the whole sweep by a single [_tcpProbeTimeout].
+    final task = await Socket.startConnect(address, port);
     try {
-      final socket = await Socket.connect(
-        address,
-        port,
-        timeout: _tcpProbeTimeout,
-      );
+      final socket = await task.socket.timeout(_tcpProbeTimeout);
       await socket.close();
       return stopwatch.elapsedMilliseconds;
     } catch (_) {
+      task.cancel();
       return null;
     }
   }

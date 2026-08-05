@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../models/server_config.dart';
+import 'ping_wave.dart';
 
 class ServerCard extends StatelessWidget {
   const ServerCard({
@@ -75,7 +76,7 @@ class ServerCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               if (isMeasuring)
-                const _PingWave()
+                const PingWave()
               else
                 _DelayBadge(delayMs: item?.delayMs, pingMethod: pingMethod),
               const SizedBox(width: 8),
@@ -184,78 +185,4 @@ class _DelayBadge extends StatelessWidget {
       ],
     );
   }
-}
-
-/// Sonar-style ripple animation shown while a single server's ping is being
-/// measured (long-press on a server card).
-class _PingWave extends StatefulWidget {
-  const _PingWave();
-
-  @override
-  State<_PingWave> createState() => _PingWaveState();
-}
-
-class _PingWaveState extends State<_PingWave>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        return SizedBox(
-          width: 34,
-          height: 34,
-          child: CustomPaint(
-            painter: _PingWavePainter(_controller.value),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _PingWavePainter extends CustomPainter {
-  const _PingWavePainter(this.progress);
-
-  final double progress;
-
-  static const _waveCount = 3;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final maxRadius = size.width / 2;
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4
-      ..strokeCap = StrokeCap.round;
-    final dot = Paint()..color = AppColors.primary;
-    for (var i = 0; i < _waveCount; i++) {
-      final p = (progress + i / _waveCount) % 1.0;
-      ring.color = AppColors.primary.withValues(alpha: (1 - p) * 0.6);
-      canvas.drawCircle(center, 3 + p * (maxRadius - 3), ring);
-    }
-    canvas.drawCircle(center, 3.2, dot);
-  }
-
-  @override
-  bool shouldRepaint(covariant _PingWavePainter oldDelegate) =>
-      oldDelegate.progress != progress;
 }

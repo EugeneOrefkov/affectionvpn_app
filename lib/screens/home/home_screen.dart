@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/subscription_info.dart';
 import '../../state/app_state.dart';
+import 'widgets/ping_wave.dart';
 import 'widgets/power_button.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -93,6 +94,7 @@ class HomeScreen extends StatelessWidget {
                           Expanded(
                             child: _PingCard(
                               delayMs: server?.delayMs,
+                              connected: state.isConnected,
                               isMeasuring: state.measuringIndex ==
                                   state.selectedIndex,
                               onTap: () => context
@@ -110,7 +112,7 @@ class HomeScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _SpeedtestCard(connected: state.isConnected),
+                      child: const _SpeedtestCard(),
                     ),
                     const SizedBox(height: 16),
                     Padding(
@@ -375,31 +377,27 @@ class _TrafficCard extends StatelessWidget {
 class _PingCard extends StatelessWidget {
   const _PingCard({
     required this.delayMs,
+    required this.connected,
     required this.isMeasuring,
     required this.onTap,
   });
 
   final int? delayMs;
+  final bool connected;
   final bool isMeasuring;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final measuring = connected && isMeasuring;
     return _StatCard(
       icon: Icons.network_ping,
       label: 'Пинг',
-      onTap: onTap,
-      child: isMeasuring
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.accent,
-              ),
-            )
+      onTap: connected ? onTap : null,
+      child: measuring
+          ? const PingWave(size: 20, strokeWidth: 2.2)
           : Text(
-              delayMs == null || delayMs! <= 0 ? '—' : '$delayMs мс',
+              !connected || delayMs == null || delayMs! <= 0 ? '—' : '$delayMs мс',
               style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 16,
@@ -426,15 +424,13 @@ class _IpCardState extends State<_IpCard> {
   @override
   void initState() {
     super.initState();
-    if (widget.connected) {
-      _load();
-    }
+    _load();
   }
 
   @override
   void didUpdateWidget(covariant _IpCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.connected && !oldWidget.connected) {
+    if (widget.connected != oldWidget.connected) {
       _load();
     }
   }
@@ -461,16 +457,9 @@ class _IpCardState extends State<_IpCard> {
     return _StatCard(
       icon: Icons.language,
       label: 'IP адрес',
-      onTap: widget.connected ? _load : null,
+      onTap: _load,
       child: _loading
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.accent,
-              ),
-            )
+          ? const PingWave(size: 20, strokeWidth: 2.2, color: AppColors.accent)
           : Text(
               _ip ?? '—',
               style: const TextStyle(
@@ -484,9 +473,7 @@ class _IpCardState extends State<_IpCard> {
 }
 
 class _SpeedtestCard extends StatefulWidget {
-  const _SpeedtestCard({required this.connected});
-
-  final bool connected;
+  const _SpeedtestCard();
 
   @override
   State<_SpeedtestCard> createState() => _SpeedtestCardState();
@@ -557,20 +544,17 @@ class _SpeedtestCardState extends State<_SpeedtestCard> {
             ),
           ),
           if (_loading)
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.accent,
-              ),
+            const PingWave(
+              size: 22,
+              strokeWidth: 2.2,
+              color: AppColors.accent,
             )
           else
             Material(
               color: AppColors.primary.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(10),
               child: InkWell(
-                onTap: widget.connected ? _run : null,
+                onTap: _run,
                 borderRadius: BorderRadius.circular(10),
                 child: const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
