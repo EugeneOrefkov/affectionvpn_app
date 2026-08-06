@@ -116,8 +116,6 @@ static gboolean my_application_local_command_line(GApplication* application,
 
 // Implements GApplication::startup.
 static void my_application_startup(GApplication* application) {
-  MyApplication* self = MY_APPLICATION(application);
-
   // Prefer dark theme for the header bar to match the app.
   g_object_set(gtk_settings_get_default(),
                "gtk-application-prefer-dark-theme", TRUE, nullptr);
