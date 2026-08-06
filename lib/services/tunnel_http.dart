@@ -236,6 +236,61 @@ class TunnelHttp {
         await reader.read(len + 2);
     }
   }
+
+  Future<String> downloadFile(
+    String url,
+    String destPath, {
+    void Function(int received, int total)? onProgress,
+  }) async {
+    final conn = await _connect(url);
+    final socket = conn.socket;
+    final reader = conn.reader;
+    try {
+      final uri = Uri.parse(url);
+      socket.write('GET ${uri.path} HTTP/1.0\r\n'
+          'Host: ${uri.host}\r\n'
+          'User-Agent: AffectionVPN/1.0\r\n'
+          'Connection: close\r\n\r\n');
+      final statusLine = await reader.readLine();
+      if (statusLine == null || !statusLine.contains('200')) {
+        throw Exception('HTTP ${statusLine?.split(' ')[1] ?? 'error'}');
+      }
+      int? total;
+      while (true) {
+        final header = await reader.readLine();
+        if (header == null || header.isEmpty) {
+          break;
+        }
+        final colon = header.indexOf(':');
+        if (colon > 0 &&
+            header.substring(0, colon).trim().toLowerCase() ==
+                'content-length') {
+          total = int.tryParse(header.substring(colon + 1).trim());
+        }
+      }
+      final file = File(destPath);
+      final sink = file.openWrite();
+      var received = 0;
+      try {
+        final data = await reader.readToEnd(
+          timeout: const Duration(seconds: 60),
+        );
+        received = data.length;
+        sink.add(data);
+        onProgress?.call(received, total ?? received);
+      } finally {
+        await sink.flush();
+        await sink.close();
+      }
+      if (total != null && received < total) {
+        await file.delete();
+        throw Exception('Download incomplete: $received/$total');
+      }
+      return destPath;
+    } finally {
+      socket.destroy();
+    }
+  }
 }
 
 class _Response {

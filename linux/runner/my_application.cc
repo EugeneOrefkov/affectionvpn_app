@@ -101,9 +101,28 @@ static gboolean my_application_local_command_line(GApplication* application,
 
 // Implements GApplication::startup.
 static void my_application_startup(GApplication* application) {
-  // MyApplication* self = MY_APPLICATION(object);
+  MyApplication* self = MY_APPLICATION(application);
 
-  // Perform any actions required at application startup.
+  // Dark header bar to match the app's dark theme.
+  GtkCssProvider* css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(css,
+      "headerbar {"
+      "  background: #1a1a2e;"
+      "  color: #e0e0e0;"
+      "}"
+      "headerbar label { color: #e0e0e0; }"
+      "headerbar button {"
+      "  background: #16213e;"
+      "  color: #e0e0e0;"
+      "  border-color: #2a2a4a;"
+      "}"
+      "headerbar button:hover { background: #0f3460; }",
+      -1);
+  gtk_style_context_add_provider_for_screen(
+      gdk_screen_get_default(),
+      GTK_STYLE_PROVIDER(css),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(css);
 
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }

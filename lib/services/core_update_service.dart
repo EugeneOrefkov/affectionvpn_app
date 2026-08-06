@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
@@ -14,6 +15,8 @@ class CoreUpdateService {
   static const _mavenArtifact = 'xray-android';
   static const _mavenMetadata =
       'https://repo1.maven.org/maven2/$_mavenGroup/$_mavenArtifact/maven-metadata.xml';
+  static const _githubReleases =
+      'https://api.github.com/repos/XTLS/Xray-core/releases?per_page=10';
   static const _headers = {'User-Agent': 'AffectionVPN/1.0'};
 
   static const _abiAssets = {
@@ -22,20 +25,35 @@ class CoreUpdateService {
   };
 
   Future<String?> fetchLatestVersion() async {
-    final response = await http
-        .get(Uri.parse(_mavenMetadata), headers: _headers)
-        .timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200) {
-      return null;
-    }
-    final versions = RegExp(r'<version>([^<]+)</version>')
-        .allMatches(response.body)
-        .map((m) => m.group(1)!)
-        .toList();
-    if (versions.isEmpty) {
-      return null;
-    }
-    return versions.last;
+    try {
+      final response = await http
+          .get(Uri.parse(_mavenMetadata), headers: _headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final version = RegExp(r'<latest>([^<]+)</latest>')
+            .firstMatch(response.body)
+            ?.group(1);
+        if (version != null && version.isNotEmpty) {
+          return version;
+        }
+      }
+    } catch (_) {}
+    // Fallback: GitHub API if Maven Central is unreachable.
+    try {
+      final response = await http
+          .get(Uri.parse(_githubReleases), headers: _headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final releases = jsonDecode(response.body) as List<dynamic>;
+        for (final release in releases) {
+          final tag = (release['tag_name'] as String?) ?? '';
+          if (RegExp(r'^v?\d+\.\d+\.\d+$').hasMatch(tag)) {
+            return tag.startsWith('v') ? tag.substring(1) : tag;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<bool> isSupported() async {

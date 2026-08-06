@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_vless/flutter_vless.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/server_config.dart';
 import '../models/subscription_info.dart';
@@ -626,17 +629,37 @@ class AppState extends ChangeNotifier {
     _downloadProgress = 0;
     notifyListeners();
     try {
-      final path = await UpdateService.instance.download(
-        update.apkUrl,
-        onProgress: (received, total) {
+      final dir = await getApplicationDocumentsDirectory();
+      final destPath = '${dir.path}/affection_vpn_update.apk';
+
+      if (isConnected) {
+        final http = _networkHttp;
+        await http.downloadFile(update.apkUrl, destPath,
+            onProgress: (received, total) {
           if (total > 0) {
             _downloadProgress = received / total;
           }
           notifyListeners();
-        },
-        expectedSha256: update.sha256,
-      );
-      _downloadedApkPath = path;
+        });
+        if (update.sha256 != null && update.sha256!.isNotEmpty) {
+          final bytes = await File(destPath).readAsBytes();
+          final hash = sha256.convert(bytes).toString();
+          if (hash != update.sha256!.toLowerCase()) {
+            await File(destPath).delete();
+            throw Exception('Проверка целостности APK не пройдена');
+          }
+        }
+      } else {
+        await UpdateService.instance.download(update.apkUrl,
+            onProgress: (received, total) {
+              if (total > 0) {
+                _downloadProgress = received / total;
+              }
+              notifyListeners();
+            },
+            expectedSha256: update.sha256);
+      }
+      _downloadedApkPath = destPath;
       _downloadProgress = 1;
     } catch (e) {
       _downloadedApkPath = null;

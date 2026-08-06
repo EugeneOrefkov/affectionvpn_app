@@ -31,7 +31,7 @@ class LinuxVlessPlatform extends VlessPlatform {
   static const defaultApiPort = 10807;
 
   static const _startTimeout = Duration(seconds: 8);
-  static const _connectTimeout = Duration(seconds: 5);
+  static const _connectTimeout = Duration(seconds: 2);
 
   Process? _process;
   String? _xrayPath;
@@ -190,10 +190,10 @@ class LinuxVlessPlatform extends VlessPlatform {
       // A leastLoad balancer only routes after its observatory has recorded the
       // first probe; retry a few times so the warm-up becomes a valid ping.
       var delay = -1;
-      for (var attempt = 0; attempt < 4; attempt++) {
-        if (attempt > 0) {
-          await Future<void>.delayed(const Duration(milliseconds: 400));
-        }
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
         delay = await _probeHttp(prepared.httpPort, url);
         if (delay >= 0) {
           break;
