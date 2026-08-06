@@ -88,15 +88,18 @@ class UpdateService {
       return null;
     }
 
-    final apkUrl = asset['apk_url'] as String?;
-    if (apkUrl == null || apkUrl.isEmpty) {
+    final downloadUrl = (abi == 'linux-x64'
+            ? (asset['tar_url'] as String?)
+            : (asset['apk_url'] as String?)) ??
+        (asset['apk_url'] as String?);
+    if (downloadUrl == null || downloadUrl.isEmpty) {
       return null;
     }
 
     final published = data['published_at'] as String?;
     return UpdateInfo(
       version: version,
-      apkUrl: apkUrl,
+      apkUrl: downloadUrl,
       tagName: data['tag'] as String?,
       changelog: data['changelog'] as String?,
       publishedAt: published != null ? DateTime.tryParse(published) : null,

@@ -25,6 +25,12 @@ cd affectionvpn_app/packaging/arch
 makepkg -si
 ```
 
+Удаление:
+
+```bash
+sudo pacman -R affection-vpn
+```
+
 The app finds Xray at `/usr/bin/xray` and geo data under `/usr/share/v2ray`.
 To override the core location, set `FLUTTER_VLESS_XRAY` to a path, or drop a
 binary at `/usr/lib/affection-vpn/xray` with `geoip.dat`/`geosite.dat`

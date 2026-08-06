@@ -630,7 +630,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final destPath = '${dir.path}/affection_vpn_update.apk';
+      final ext = Platform.isAndroid ? '.apk' : '.tar.gz';
+      final destPath = '${dir.path}/affection_vpn_update$ext';
 
       if (isConnected) {
         final http = _networkHttp;
@@ -676,7 +677,36 @@ class AppState extends ChangeNotifier {
     if (path == null) {
       return;
     }
+    if (Platform.isLinux) {
+      await _installLinuxUpdate(path);
+      return;
+    }
     await UpdateService.instance.install(path);
+  }
+
+  Future<void> _installLinuxUpdate(String path) async {
+    final dir = Directory(path).parent;
+    final extractDir = '${dir.path}/update_extracted';
+    if (Directory(extractDir).existsSync()) {
+      Directory(extractDir).deleteSync(recursive: true);
+    }
+    Directory(extractDir).createSync();
+    final result = await Process.run(
+      'tar',
+      ['-xzf', path, '-C', extractDir],
+    );
+    if (result.exitCode != 0) {
+      throw Exception('Ошибка распаковки: ${result.stderr}');
+    }
+    final result2 = await Process.run(
+      'pkexec',
+      ['cp', '-r', '$extractDir/.', '/opt/affection-vpn/'],
+    );
+    if (result2.exitCode != 0) {
+      throw Exception('Установка требует права root. '
+          'Запустите: sudo cp -r $extractDir/. /opt/affection-vpn/');
+    }
+    Directory(extractDir).deleteSync(recursive: true);
   }
 
   void dismissUpdate() {

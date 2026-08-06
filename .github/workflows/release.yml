@@ -386,3 +386,39 @@ jobs:
           else
             echo "::warning::$DEB_PATH not found, skipping .deb upload"
           fi
+
+          # 3) Update latest.json with Linux assets
+          TAR_PATH="/tmp/affection-vpn-$V-linux-x64.tar.gz"
+          DEB_PATH="build/linux/x64/release/affection-vpn_${V}_amd64.deb"
+          REPO="$GITHUB_REPOSITORY"
+          curl -sL -o /tmp/latest-linux.json \
+            "https://github.com/$REPO/releases/download/$TAG/latest.json"
+          python3 "$V" "$REPO" "$TAG" <<'PYEOF'
+import hashlib, json, os, sys
+v = sys.argv[1]; repo = sys.argv[2]; tag = sys.argv[3]
+tar_path = '/tmp/affection-vpn-' + v + '-linux-x64.tar.gz'
+d = json.load(open('/tmp/latest-linux.json'))
+assets = d.setdefault('assets', {})
+tar_url = 'https://github.com/' + repo + '/releases/download/' + tag + '/affection-vpn-' + v + '-linux-x64.tar.gz'
+with open(tar_path, 'rb') as f:
+    tar_sha = hashlib.sha256(f.read()).hexdigest()
+tar_size = os.path.getsize(tar_path)
+assets['linux-x64'] = {'tar_url': tar_url, 'size': tar_size, 'sha256': tar_sha}
+deb_path = 'build/linux/x64/release/affection-vpn_' + v + '_amd64.deb'
+if os.path.exists(deb_path) and os.path.getsize(deb_path) > 0:
+    deb_url = 'https://github.com/' + repo + '/releases/download/' + tag + '/affection-vpn_' + v + '_amd64.deb'
+    with open(deb_path, 'rb') as f:
+        deb_sha = hashlib.sha256(f.read()).hexdigest()
+    deb_size = os.path.getsize(deb_path)
+    assets['linux-deb'] = {'deb_url': deb_url, 'size': deb_size, 'sha256': deb_sha}
+json.dump(d, open('/tmp/latest-linux.json', 'w'))
+PYEOF
+          delete_asset latest.json
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary "@/tmp/latest-linux.json" \
+            "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=latest.json" \
+            -o /tmp/latest-upload.json
+          python3 -c "import json; d=json.load(open('/tmp/latest-upload.json')); assert d.get('name')=='latest.json', d"
+          echo "updated latest.json with Linux assets"

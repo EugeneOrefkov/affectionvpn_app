@@ -1,8 +1,13 @@
+import 'dart:io' as io;
+
 import 'package:device_info_plus/device_info_plus.dart';
 
 /// Primary device ABI key used to pick the matching build (split APK asset,
 /// Xray-core bundle, ...). Falls back to "universal" when detection fails.
 Future<String> deviceAbiKey() async {
+  if (!io.Platform.isAndroid) {
+    return 'linux-x64';
+  }
   try {
     final abis = (await DeviceInfoPlugin().androidInfo).supportedAbis;
     if (abis.isNotEmpty) {
