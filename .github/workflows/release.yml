@@ -193,6 +193,24 @@ jobs:
 
           python3 -c "import json,sys; v,tag=sys.argv[1],sys.argv[2]; json.dump({'version':v,'tag':tag,'published_at':'','changelog':'','assets':{}}, open('/tmp/manifest.json','w'))" "$V" "$TAG"
 
+          # The release can be re-run, in which case its assets already exist
+          # and the upload API refuses duplicates with "already_exists", so we
+          # delete an existing asset with the same name before uploading.
+          delete_asset() {
+            local name="$1"
+            local existing
+            existing=$(curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets?per_page=100" \
+              | python3 -c "import json,sys; a=json.load(sys.stdin); print(next((x['id'] for x in a if x['name']=='$name'), ''))" 2>/dev/null)
+            if [ -n "$existing" ]; then
+              curl -s -X DELETE \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$REPO/releases/assets/$existing" >/dev/null
+              echo "replaced existing asset: $name"
+            fi
+          }
+
           upload_one() {
             local abi="$1" src="$2"
             local name="affection_vpn-$V-$abi.apk"
@@ -202,6 +220,7 @@ jobs:
               gh issue create --title "Asset missing on $TAG" --body "$DIAG"
               exit 1
             fi
+            delete_asset "$name"
             sha=$(sha256sum "$src" | cut -d' ' -f1)
             size=$(stat -c %s "$src")
             upload=$(curl -s -X POST \
@@ -239,6 +258,7 @@ jobs:
             "https://api.github.com/repos/$REPO/releases/$RELEASE_ID")
           python3 -c "import json,sys; d=json.load(open('/tmp/manifest.json')); rel=json.loads(sys.argv[1]); d['published_at']=rel.get('published_at') or ''; d['changelog']=rel.get('body') or ''; json.dump(d, open('/tmp/manifest.json','w'))" "$REL_JSON"
 
+          delete_asset latest.json
           curl -s -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Content-Type: application/json" \
@@ -321,6 +341,17 @@ jobs:
           if [ -z "$RELEASE_ID" ]; then
             echo "::error::release $TAG not found, cannot upload $TARBALL"
             exit 1
+          fi
+          # Re-runs leave the previous tarball attached; replace it.
+          EXISTING=$(curl -s \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
+            | python3 -c "import json,sys; a=json.load(sys.stdin); print(next((x['id'] for x in a if x['name']=='$TARBALL'), ''))" 2>/dev/null)
+          if [ -n "$EXISTING" ]; then
+            curl -s -X DELETE \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/$EXISTING" >/dev/null
+            echo "replaced existing asset: $TARBALL"
           fi
           curl -s -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
