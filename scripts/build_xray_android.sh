@@ -156,10 +156,11 @@ with zipfile.ZipFile(base_aar) as z:
     z.extractall(base)
 
 for abi in abis:
-    shutil.copy(
-        os.path.join(work, "jniLibs", abi, "libxray.so"),
-        os.path.join(base, "jni", abi, "libxray.so"),
-    )
+    src = os.path.join(work, "jniLibs", abi, "libxray.so")
+    if os.path.exists(src):
+        shutil.copy(src, os.path.join(base, "jni", abi, "libxray.so"))
+    else:
+        print(f"skipping {abi}: libxray.so not built")
 
 if os.path.exists(out):
     os.remove(out)
