@@ -1,0 +1,49 @@
+# Maintainer: Eugene Orefkov
+# Prebuilt by the app's GitHub Actions release workflow and uploaded to the
+# matching GitHub release as affection-vpn-<pkgver>-linux-x64.tar.gz. The
+# bundle is the standard `flutter build linux --release` output
+# (binary + data/ + lib/), installed under /opt/affection-vpn.
+#
+# The Xray core is NOT bundled: it is pulled from the AUR `xray` package, and
+# the geo databases from the official `extra` repo. The app finds the core at
+# /usr/bin/xray and the assets under /usr/share/v2ray.
+
+pkgname=affection-vpn
+pkgver=1.0.15
+pkgrel=1
+pkgdesc="Native Linux Xray (VLESS) VPN client with subscription support"
+arch=('x86_64')
+url="https://github.com/EugeneOrefkov/affectionvpn_app"
+license=('custom')
+depends=(
+  'gtk3'
+  'xray'
+  'v2ray-geoip'
+  'v2ray-domain-list-community'
+)
+source=(
+  "affection-vpn-$pkgver-linux-x64.tar.gz::https://github.com/EugeneOrefkov/affectionvpn_app/releases/download/v$pkgver/affection-vpn-$pkgver-linux-x64.tar.gz"
+  'affection-vpn.desktop'
+  'affection-vpn.png'
+)
+# Binary tarball hash is filled in on release; SKIP keeps makepkg usable until
+# the first publish.
+sha256sums=(
+  'SKIP'
+  'SKIP'
+  'SKIP'
+)
+
+package() {
+  install -d "$pkgdir/opt/affection-vpn"
+  cp -r "$srcdir"/data "$srcdir"/lib "$pkgdir/opt/affection-vpn/"
+  install -Dm755 "$srcdir/affection_vpn" "$pkgdir/opt/affection-vpn/affection_vpn"
+
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/affection-vpn/affection_vpn "$pkgdir/usr/bin/affection-vpn"
+
+  install -Dm644 "$srcdir/affection-vpn.desktop" \
+    "$pkgdir/usr/share/applications/dev.affection.affection_vpn.desktop"
+  install -Dm644 "$srcdir/affection-vpn.png" \
+    "$pkgdir/usr/share/icons/hicolor/192x192/apps/affection-vpn.png"
+}

@@ -133,6 +133,40 @@ void main() {
       expect(server, isNotNull);
       expect(server!.remark, 'Legacy');
     });
+
+    test('extracts address and port from flat VLESS JSON settings', () {
+      const flatJson = '''
+{
+  "remarks": "Universal Node",
+  "log": {"loglevel": "error"},
+  "inbounds": [],
+  "outbounds": [
+    {
+      "tag": "proxy",
+      "protocol": "vless",
+      "settings": {
+        "address": "universal.example.com",
+        "port": 8443,
+        "id": "11111111-2222-3333-4444-555555555555",
+        "encryption": "none",
+        "flow": ""
+      },
+      "streamSettings": {"network": "tcp", "security": "none"}
+    },
+    {"tag": "direct", "protocol": "freedom", "settings": {}},
+    {"tag": "block", "protocol": "blackhole", "settings": {}}
+  ]
+}
+''';
+
+      final server = ServerConfig.fromProfile(FlutterVless.parse(flatJson));
+
+      expect(server, isNotNull);
+      expect(server!.remark, 'Universal Node');
+      expect(server.address, 'universal.example.com');
+      expect(server.port, 8443);
+      expect(server.protocol, 'vless');
+    });
   });
 
   test('parseMany decodes base64 JSON array from Remnawave', () {
@@ -311,8 +345,9 @@ void main() {
       final pingConfig =
           (map['burstObservatory'] as Map)['pingConfig'] as Map;
       expect(pingConfig['destination'], ServerConfig.observatoryProbeUrl);
+      expect(pingConfig['probeType'], 'tcp');
       expect(pingConfig['interval'], '30s');
-      expect(pingConfig['timeout'], '5s');
+      expect(pingConfig['timeout'], '1s');
     });
 
     test('adds a burst observatory for leastLoad balancers without one', () {

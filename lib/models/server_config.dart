@@ -30,6 +30,46 @@ class ServerConfig {
     return address;
   }
 
+  /// Connection method of the first outbound, shown in the server list:
+  /// protocol (vless, trojan, ...), transport (tcp, ws, grpc, ...) and
+  /// security (reality, tls, ...). `security` is null when the connection is
+  /// plain, so no misleading "none" pill is rendered.
+  ({String protocol, String? transport, String? security}) get methodInfo {
+    try {
+      final decoded = jsonDecode(config) as Map<String, dynamic>;
+      final outbounds = decoded['outbounds'];
+      if (outbounds is List && outbounds.isNotEmpty) {
+        final first = outbounds.first;
+        if (first is Map) {
+          final rawProtocol = first['protocol'];
+          final streamSettings = first['streamSettings'];
+          String? transport;
+          String? security;
+          if (streamSettings is Map) {
+            final network = streamSettings['network'];
+            if (network is String && network.isNotEmpty) {
+              transport = network;
+            }
+            final rawSecurity = streamSettings['security'];
+            if (rawSecurity is String &&
+                rawSecurity.isNotEmpty &&
+                rawSecurity != 'none') {
+              security = rawSecurity;
+            }
+          }
+          return (
+            protocol: rawProtocol is String && rawProtocol.isNotEmpty
+                ? rawProtocol
+                : protocol,
+            transport: transport,
+            security: security,
+          );
+        }
+      }
+    } catch (_) {}
+    return (protocol: protocol, transport: null, security: null);
+  }
+
   /// Removes the country-flag emoji (e.g. "🇯🇵") that some panels prepend to
   /// the remark, so the name is clean and the flag is hidden from the user.
   static String _stripLeadingFlag(String value) {
@@ -170,7 +210,11 @@ class ServerConfig {
     if (observatory is! Map) {
       map['burstObservatory'] = {
         'pingConfig': {
-          'timeout': '5s',
+          // TCP probes connect immediately and warm up within ~1 RTT, so a
+          // leastLoad balancer can route the very first ping probe instead of
+          // being "unreachable" until a slow HTTP probe times out.
+          'probeType': 'tcp',
+          'timeout': '1s',
           'interval': '30s',
           'sampling': 2,
           'destination': observatoryProbeUrl,
@@ -183,12 +227,14 @@ class ServerConfig {
     final pingConfig = observatory['pingConfig'];
     if (pingConfig is Map) {
       pingConfig['destination'] = observatoryProbeUrl;
-      pingConfig['timeout'] = '5s';
+      pingConfig['probeType'] = 'tcp';
+      pingConfig['timeout'] = '1s';
       pingConfig['interval'] = '30s';
       observatory['pingConfig'] = pingConfig;
     } else {
       observatory['pingConfig'] = {
-        'timeout': '5s',
+        'probeType': 'tcp',
+        'timeout': '1s',
         'interval': '30s',
         'sampling': 2,
         'destination': observatoryProbeUrl,
@@ -316,6 +362,10 @@ class ServerConfig {
       if (server is String && server.isNotEmpty) {
         return server;
       }
+      final flat = settings['address'];
+      if (flat is String && flat.isNotEmpty) {
+        return flat;
+      }
     }
     return null;
   }
@@ -334,6 +384,10 @@ class ServerConfig {
       final server = _firstField(settings['servers'], 'port');
       if (server is num && server > 0) {
         return server.toInt();
+      }
+      final flat = settings['port'];
+      if (flat is num && flat > 0) {
+        return flat.toInt();
       }
     }
     return null;

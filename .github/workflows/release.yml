@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'App version to release (e.g. 1.0.16)'
+        required: true
 
 permissions:
   contents: write
@@ -12,6 +17,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Tag pushes: GITHUB_REF_NAME is the tag (v1.0.15). Manual dispatch: the
+      # version input (1.0.16).
+      VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,17 +66,30 @@ jobs:
             echo "AFFECTION_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
           } >> "$HOME/.gradle/gradle.properties"
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;28.2.13676358"
+
+      - name: Build Xray core AAR
+        env:
+          ANDROID_NDK_HOME: "$ANDROID_HOME/ndk/28.2.13676358"
+        run: scripts/build_xray_android.sh
+
       - name: Build release APK
         run: |
           set -o pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          MAJOR="${VERSION%%.*}"
-          REST="${VERSION#*.}"
+          V="${VERSION#v}"
+          MAJOR="${V%%.*}"
+          REST="${V#*.}"
           MINOR="${REST%%.*}"
           PATCH="${REST#*.}"
           BUILD_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
           flutter build apk --release \
-            --build-name="$VERSION" \
+            --build-name="$V" \
             --build-number="$BUILD_CODE" 2>&1 | tee /tmp/build.log
         env:
           CI: "true"
@@ -88,7 +110,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
-            --title "CI build failure on $GITHUB_REF_NAME" \
+            --title "CI build failure on ${VERSION#v}" \
             --body-file /tmp/build.log
 
       - name: Create GitHub Release
@@ -98,6 +120,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
+          V="${VERSION#v}"
+          TAG="v$V"
           DIAG="cwd: $(pwd)\n"
           DIAG+="find apk:\n$(find . -name '*.apk' 2>&1)\n"
           DIAG+="ls dir:\n$(ls -la build/app/outputs/flutter-apk/ 2>&1)\n"
@@ -107,7 +131,7 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            -d "{\"tag_name\":\"$GITHUB_REF_NAME\",\"name\":\"Affection VPN ${GITHUB_REF_NAME#v}\",\"generate_release_notes\":true}" \
+            -d "{\"tag_name\":\"$TAG\",\"name\":\"Affection VPN $V\",\"generate_release_notes\":true}" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/releases")
           DIAG+="create resp:\n$RESP\n"
           RELEASE_ID=$(printf '%s' "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
@@ -115,11 +139,11 @@ jobs:
             RELEASE_ID=$(curl -s \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
               | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
           fi
           if [ -z "$RELEASE_ID" ]; then
-            gh issue create --title "Release failed on $GITHUB_REF_NAME" --body "$DIAG"
+            gh issue create --title "Release failed on $TAG" --body "$DIAG"
             exit 1
           fi
           DIAG+="release id: $RELEASE_ID\n"
@@ -127,13 +151,66 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Content-Type: application/octet-stream" \
             --data-binary "@$APK" \
-            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=affection_vpn-${GITHUB_REF_NAME#v}.apk" \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=affection_vpn-$V.apk" \
             -o /tmp/upload.json
           DIAG+="upload resp:\n$(cat /tmp/upload.json)\n"
           UP_NAME=$(python3 -c "import json; d=json.load(open('/tmp/upload.json')); print(d.get('name') or '')" 2>/dev/null)
           if [ -z "$UP_NAME" ]; then
-            gh issue create --title "Asset upload failed on $GITHUB_REF_NAME" --body "$DIAG"
+            gh issue create --title "Asset upload failed on $TAG" --body "$DIAG"
             exit 1
           fi
           echo "uploaded: $UP_NAME"
           printf '%b' "$DIAG"
+
+  build-linux:
+    needs: build
+    if: success()
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.8
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build Linux bundle
+        run: |
+          set -o pipefail
+          V="${VERSION#v}"
+          flutter build linux --release --build-name="$V" 2>&1 | tee /tmp/linux-build.log
+
+      - name: Upload Linux release asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          V="${VERSION#v}"
+          TAG="v$V"
+          TARBALL="affection-vpn-$V-linux-x64.tar.gz"
+          tar -czf "/tmp/$TARBALL" -C build/linux/x64/release/bundle .
+          RELEASE_ID=$(curl -s \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+          if [ -z "$RELEASE_ID" ]; then
+            echo "::error::release $TAG not found, cannot upload $TARBALL"
+            exit 1
+          fi
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/gzip" \
+            --data-binary "@/tmp/$TARBALL" \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$TARBALL" \
+            -o /tmp/linux-upload.json
+          python3 -c "import json; d=json.load(open('/tmp/linux-upload.json')); assert d.get('name')=='$TARBALL', d"
+          echo "uploaded: $TARBALL"

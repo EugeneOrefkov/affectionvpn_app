@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../services/request_log_service.dart';
 import '../../services/vpn_service.dart';
 import '../../state/app_state.dart';
 import '../onboarding/subscription_input_screen.dart';
+import 'request_log_screen.dart';
 import 'widgets/update_section.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -154,6 +156,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         value: state.proxyOnly,
                         onChanged: state.setProxyOnly,
                       ),
+                      const Divider(height: 1),
+                      _SwitchRow(
+                        icon: Icons.language,
+                        title: 'Показывать IP на главном экране',
+                        subtitle: 'Отображать текущий IP-адрес',
+                        value: state.showIp,
+                        onChanged: state.setShowIp,
+                      ),
                       if (state.proxyOnly) ...[
                         const Divider(height: 1),
                         _ProxyInfo(
@@ -168,6 +178,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 24),
                   const _SectionTitle('Обновление'),
                   const UpdateSection(),
+                  const SizedBox(height: 24),
+                  const _SectionTitle('Журнал запросов'),
+                  _Card(
+                    children: [
+                      _SwitchRow(
+                        icon: Icons.list_alt,
+                        title: 'Логирование запросов',
+                        subtitle: 'Записывать запросы приложения и трафик туннеля',
+                        value: state.requestLogEnabled,
+                        onChanged: state.setRequestLogEnabled,
+                      ),
+                      const Divider(height: 1),
+                      ListenableBuilder(
+                        listenable: RequestLogService.instance,
+                        builder: (context, _) => _OpenLogRow(
+                          enabled: state.requestLogEnabled,
+                          entryCount:
+                              RequestLogService.instance.entries.length,
+                          onTap: state.requestLogEnabled
+                              ? () => _openRequestLog()
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 24),
                   const _SectionTitle('О приложении'),
                   _Card(
@@ -230,6 +265,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           replacesCurrent: true,
         ),
       ),
+    );
+  }
+
+  void _openRequestLog() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const RequestLogScreen()),
     );
   }
 }
@@ -482,6 +523,72 @@ class _SwitchRow extends StatelessWidget {
           ),
           Switch(value: value, onChanged: onChanged),
         ],
+      ),
+    );
+  }
+}
+
+class _OpenLogRow extends StatelessWidget {
+  const _OpenLogRow({
+    required this.enabled,
+    required this.entryCount,
+    required this.onTap,
+  });
+
+  final bool enabled;
+  final int entryCount;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        child: Row(
+          children: [
+            Icon(
+              Icons.receipt_long,
+              color: enabled ? AppColors.primary : AppColors.textTertiary,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Журнал запросов',
+                    style: TextStyle(
+                      color: enabled
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    enabled
+                        ? '$entryCount записей'
+                        : 'Включите логирование, чтобы просматривать записи',
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Icon(
+              Icons.chevron_right,
+              color: enabled ? AppColors.textTertiary : AppColors.border,
+              size: 18,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -118,18 +118,9 @@ class _PowerButtonState extends State<PowerButton>
                     )
                   else
                     Icon(
-                      connected ? Icons.power_settings_new : Icons.power_settings_new,
+                      Icons.power_settings_new,
                       color: Colors.white,
                       size: widget.size * 0.28,
-                    ),
-                  if (connected)
-                    Positioned(
-                      bottom: widget.size * 0.16,
-                      child: const Icon(
-                        Icons.check_circle,
-                        color: Colors.white,
-                        size: 18,
-                      ),
                     ),
                 ],
               ),

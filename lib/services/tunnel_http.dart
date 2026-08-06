@@ -4,6 +4,8 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'request_log_service.dart';
+
 /// Minimal SOCKS5 + HTTP/1.1 client used to reach the internet through the
 /// app's local Xray tunnel (current IP lookup, download speed test) without
 /// relying on the native plugin, which only exposes a HEAD probe.
@@ -55,6 +57,7 @@ class TunnelHttp {
   Future<double?> measureMbps({
     Duration duration = const Duration(seconds: 5),
   }) async {
+    final stopwatch = Stopwatch()..start();
     try {
       final conn = await _connect(_speedUrl);
       final socket = conn.socket;
@@ -69,21 +72,28 @@ class TunnelHttp {
             break;
           }
         }
-        final stopwatch = Stopwatch()..start();
         final bytes = await reader.readToEnd(timeout: duration);
         stopwatch.stop();
         final seconds = stopwatch.elapsedMilliseconds / 1000.0;
         final mb = bytes.length / (1024 * 1024);
+        _logRequest(
+          _speedUrl,
+          status: '200',
+          durationMs: stopwatch.elapsedMilliseconds,
+          bytes: bytes.length,
+        );
         return seconds > 0 ? (mb * 8) / seconds : null;
       } finally {
         socket.destroy();
       }
     } catch (_) {
+      _logRequest(_speedUrl, error: 'speed test failed');
       return null;
     }
   }
 
   Future<_Response> _request(String url) async {
+    final stopwatch = Stopwatch()..start();
     final uri = _url(url);
     final conn = await _connect(url);
     final socket = conn.socket;
@@ -106,6 +116,12 @@ class TunnelHttp {
       }
       final length = int.tryParse(headers['content-length'] ?? '') ?? 0;
       final bodyBytes = await reader.read(length);
+      _logRequest(
+        url,
+        status: status,
+        durationMs: stopwatch.elapsedMilliseconds,
+        bytes: bodyBytes.length,
+      );
       return _Response(
         status: status,
         body: utf8.decode(bodyBytes, allowMalformed: true),
@@ -113,6 +129,25 @@ class TunnelHttp {
     } finally {
       socket.destroy();
     }
+  }
+
+  void _logRequest(
+    String url, {
+    String? status,
+    int? durationMs,
+    int? bytes,
+    String? error,
+  }) {
+    try {
+      RequestLogService.instance.logAppRequest(
+        target: url,
+        via: direct ? 'direct' : 'socks',
+        status: status,
+        durationMs: durationMs,
+        bytes: bytes,
+        error: error,
+      );
+    } catch (_) {}
   }
 
   _Url _url(String url) {

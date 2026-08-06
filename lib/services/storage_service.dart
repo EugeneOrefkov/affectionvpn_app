@@ -20,6 +20,8 @@ class StorageService {
   static const _kProxyPassword = 'proxy_password';
   static const _kPingMethod = 'ping_method';
   static const _kDeviceId = 'device_id';
+  static const _kShowIp = 'show_ip';
+  static const _kRequestLog = 'request_log_enabled';
 
   late SharedPreferences _prefs;
 
@@ -109,6 +111,20 @@ class StorageService {
 
   Future<void> setPingMethod(String value) async {
     await _prefs.setString(_kPingMethod, value == 'tcp' ? 'tcp' : 'get');
+  }
+
+  bool get showIp => _prefs.getBool(_kShowIp) ?? true;
+
+  Future<void> setShowIp(bool value) async {
+    await _prefs.setBool(_kShowIp, value);
+  }
+
+  /// Whether the app records request logging (app requests + the tunnel's
+  /// Xray access log). Off by default because it is privacy-sensitive.
+  bool get requestLogEnabled => _prefs.getBool(_kRequestLog) ?? false;
+
+  Future<void> setRequestLogEnabled(bool value) async {
+    await _prefs.setBool(_kRequestLog, value);
   }
 
   /// Persistent device identifier reported to the subscription server as

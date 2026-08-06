@@ -42,4 +42,26 @@ void main() {
     await storage.setPingMethod('get');
     expect(storage.pingMethod, 'get');
   });
+
+  test('showIp defaults to visible and toggles off', () async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = StorageService.instance;
+    await storage.init();
+
+    expect(storage.showIp, isTrue);
+
+    await storage.setShowIp(false);
+    expect(storage.showIp, isFalse);
+  });
+
+  test('request logging is disabled by default and toggles on', () async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = StorageService.instance;
+    await storage.init();
+
+    expect(storage.requestLogEnabled, isFalse);
+
+    await storage.setRequestLogEnabled(true);
+    expect(storage.requestLogEnabled, isTrue);
+  });
 }

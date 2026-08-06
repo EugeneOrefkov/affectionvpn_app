@@ -86,28 +86,62 @@ class HomeScreen extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    if (state.isConnected && server != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        server.displayName,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 22),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _PingCard(
-                              delayMs: server?.delayMs,
-                              connected: state.isConnected,
-                              isMeasuring: state.measuringIndex ==
-                                  state.selectedIndex,
-                              onTap: () => context
-                                  .read<AppState>()
-                                  .measureServerDelay(state.selectedIndex),
+                      child: state.showIp
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  child: _PingCard(
+                                    delayMs: server?.delayMs,
+                                    connected: state.isConnected,
+                                    isMeasuring:
+                                        state.measuringIndex ==
+                                        state.selectedIndex,
+                                    onTap: () => context
+                                        .read<AppState>()
+                                        .measureServerDelay(
+                                          state.selectedIndex,
+                                        ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _IpCard(connected: state.isConnected),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: _PingCard(
+                                    delayMs: server?.delayMs,
+                                    connected: state.isConnected,
+                                    isMeasuring:
+                                        state.measuringIndex ==
+                                        state.selectedIndex,
+                                    onTap: () => context
+                                        .read<AppState>()
+                                        .measureServerDelay(
+                                          state.selectedIndex,
+                                        ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _IpCard(connected: state.isConnected),
-                          ),
-                        ],
-                      ),
                     ),
                     const SizedBox(height: 12),
                     Padding(

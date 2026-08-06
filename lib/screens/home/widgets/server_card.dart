@@ -62,15 +62,18 @@ class ServerCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      item == null ? 'Не выбран' : item.protocol,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textTertiary,
-                        fontSize: 12,
-                      ),
-                    ),
+                    if (item == null)
+                      const Text(
+                        'Не выбран',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 12,
+                        ),
+                      )
+                    else
+                      _MethodPills(server: item),
                   ],
                 ),
               ),
@@ -133,6 +136,47 @@ class _FlagBadge extends StatelessWidget {
     return code.toUpperCase().codeUnits.map((c) {
       return String.fromCharCode(0x1F1E6 + c - 0x41);
     }).join();
+  }
+}
+
+class _MethodPills extends StatelessWidget {
+  const _MethodPills({required this.server});
+
+  final ServerConfig server;
+
+  @override
+  Widget build(BuildContext context) {
+    final info = server.methodInfo;
+    final items = <String>[
+      info.protocol.toUpperCase(),
+      if (info.transport != null) info.transport!.toUpperCase(),
+      if (info.security != null) info.security!.toUpperCase(),
+    ];
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: [
+        for (final (index, item) in items.indexed)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceAlt,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              item,
+              style: TextStyle(
+                color: index == 0
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 

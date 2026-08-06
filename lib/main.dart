@@ -1,12 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_vless_platform_interface/flutter_vless_platform_interface.dart';
 import 'package:provider/provider.dart';
 
 import 'core/theme/app_theme.dart';
 import 'screens/splash_screen.dart';
+import 'services/linux_vless_platform.dart';
 import 'state/app_state.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isLinux) {
+    VlessPlatform.instance = LinuxVlessPlatform();
+  }
   runApp(const AffectionVpnApp());
 }
 

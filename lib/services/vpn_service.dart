@@ -108,20 +108,21 @@ class VpnService {
     ServerConfig server, {
     required String method,
   }) {
-    if (method == 'get') {
-      return getServerDelay(server).then(
-        (delay) => delay > 0 ? delay : null,
-        onError: (_) => null,
-      );
+    if (method == 'get' || server.address.isEmpty || server.port <= 0) {
+      return getServerDelay(server)
+          .timeout(getProbeTimeout, onTimeout: () => -1)
+          .then(
+            (delay) => delay > 0 ? delay : null,
+            onError: (_) => null,
+          );
     }
-    if (server.address.isNotEmpty && server.port > 0) {
-      return measureTcpDelay(server.address, server.port);
-    }
-    return getServerDelay(server).then(
-      (delay) => delay > 0 ? delay : null,
-      onError: (_) => null,
-    );
+    return measureTcpDelay(server.address, server.port);
   }
+
+  /// Upper bound for a native GET probe (core start + up to 4 HEAD retries).
+  /// Guards the delay sweep against a hung native call, which would otherwise
+  /// leave [_isMeasuringDelay] stuck toggled on forever.
+  static const getProbeTimeout = Duration(seconds: 20);
 
   String buildAuthProxyConfig(
     String config,

@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../models/server_config.dart';
 import '../models/subscription_info.dart';
 import '../models/update_info.dart';
+import '../services/request_log_service.dart';
 import '../services/storage_service.dart';
 import '../services/subscription_service.dart';
 import '../services/tunnel_http.dart';
@@ -91,6 +92,9 @@ class AppState extends ChangeNotifier {
   bool get autoSelectBest => _storage.autoSelectBest;
   String get pingMethod => _storage.pingMethod;
 
+  bool get showIp => _storage.showIp;
+  bool get requestLogEnabled => _storage.requestLogEnabled;
+
   String get proxyLogin => _storage.proxyLogin;
   String get proxyPassword => _storage.proxyPassword;
   String get proxyHost => _proxyHost;
@@ -110,6 +114,8 @@ class AppState extends ChangeNotifier {
     _subscriptionUrl = _storage.subscriptionUrl;
     _servers = _storage.servers;
     _selectedIndex = _storage.selectedServerIndex;
+    await RequestLogService.instance.init();
+    RequestLogService.instance.setEnabled(_storage.requestLogEnabled);
     try {
       final info = await PackageInfo.fromPlatform();
       _currentVersion = info.version;
@@ -250,8 +256,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     // TCP probes are cheap and cancellable, so fire every server at once and
-    // the whole sweep ends within a single probe timeout (~1s). The native
-    // GET probe starts a core per server, so keep its pool small.
+    // the whole sweep ends within a single probe timeout (~1s). The native GET
+    // probe starts a core per server through an 8-thread pool, so keep a
+    // modest Dart-side concurrency that keeps the pool saturated.
     final concurrency = method == 'tcp' ? _servers.length.clamp(1, 128) : 16;
     var next = 0;
     final jobs = <Future<void>>[];
@@ -537,6 +544,17 @@ class AppState extends ChangeNotifier {
 
   Future<void> setPingMethod(String value) async {
     await _storage.setPingMethod(value);
+    notifyListeners();
+  }
+
+  Future<void> setShowIp(bool value) async {
+    await _storage.setShowIp(value);
+    notifyListeners();
+  }
+
+  Future<void> setRequestLogEnabled(bool value) async {
+    await _storage.setRequestLogEnabled(value);
+    RequestLogService.instance.setEnabled(value);
     notifyListeners();
   }
 
