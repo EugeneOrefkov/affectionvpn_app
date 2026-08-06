@@ -46,28 +46,13 @@ class _ServersScreenState extends State<ServersScreen> {
               child: Row(
                 children: [
                   const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Серверы',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Выберите локацию для подключения',
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Серверы',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                   IconButton(
