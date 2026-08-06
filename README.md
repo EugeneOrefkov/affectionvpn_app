@@ -8,37 +8,66 @@ traffic stats.
 
 ### Android
 
-The Android app bundles the Xray core (`flutter_vless`) and installs a real
-VPN tunnel. Build with:
+APKs are attached to each [GitHub release](https://github.com/EugeneOrefkov/affectionvpn_app/releases/latest).
+The app bundles the Xray core and installs a real VPN tunnel.
 
-```
-flutter build apk --release
-```
+### Linux
 
-### Linux (Arch / Manjaro)
+The Linux build is a native desktop client. It does not bundle Xray —
+the core and geo databases must be installed separately.
 
-The Linux build is a native desktop client. It does not bundle Xray — the core
-and geo databases come from the system packages:
+#### Arch Linux (recommended)
 
-```
-yay -S xray            # AUR: /usr/bin/xray + /usr/share/v2ray assets
-```
+Install Xray and geo databases, then build the package:
 
-Then install the app from the PKGBUILD in `packaging/arch/`:
-
-```
+```bash
+yay -S xray v2ray-geoip v2ray-domain-list-community
 cd packaging/arch
 makepkg -si
 ```
 
-The app finds the core at `/usr/bin/xray` and the geo data under
-`/usr/share/v2ray` automatically. When connected it drives the desktop's
-system proxy (GNOME/KDE/XFCE) through a local Xray HTTP inbound and reports
-per-server ping and traffic via the Xray stats API.
+Or use the PKGBUILD directly from an AUR helper once published.
 
+The app finds Xray at `/usr/bin/xray` and geo data under `/usr/share/v2ray`.
 To override the core location, set `FLUTTER_VLESS_XRAY` to a path, or drop a
 binary at `/usr/lib/affection-vpn/xray` with `geoip.dat`/`geosite.dat`
 alongside.
 
-Release tarballs (`affection-vpn-<version>-linux-x64.tar.gz`) are built by
-GitHub Actions and attached to each GitHub release.
+#### Other distros (Debian / Ubuntu / Fedora)
+
+Download the `.deb` package from the latest release:
+
+```bash
+wget https://github.com/EugeneOrefkov/affectionvpn_app/releases/latest/download/affection-vpn_1.0.23_amd64.deb
+sudo dpkg -i affection-vpn_1.0.23_amd64.deb
+```
+
+Install Xray manually:
+
+```bash
+bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+```
+
+#### Portable tarball
+
+Every release includes `affection-vpn-<version>-linux-x64.tar.gz`. Extract
+anywhere and run `./affection_vpn`:
+
+```bash
+tar -xzf affection-vpn-1.0.23-linux-x64.tar.gz
+cd bundle
+./affection_vpn
+```
+
+### Build from source
+
+```bash
+flutter pub get
+
+# Android
+flutter build apk --release
+
+# Linux
+flutter build linux --release
+make -f linux/Makefile deb   # optional: build .deb package
+```
