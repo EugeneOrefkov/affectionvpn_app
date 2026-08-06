@@ -218,11 +218,20 @@ jobs:
             python3 -c "import json,sys; abi,url,size,sha=sys.argv[1],sys.argv[2],int(sys.argv[3]),sys.argv[4]; d=json.load(open('/tmp/manifest.json')); d['assets'][abi]={'apk_url':url,'size':size,'sha256':sha}; json.dump(d, open('/tmp/manifest.json','w'))" "$abi" "$url" "$size" "$sha"
           }
 
-          upload_one arm64-v8a "$OUT/app-arm64-v8a-release.apk"
-          upload_one armeabi-v7a "$OUT/app-armeabi-v7a-release.apk"
-          upload_one x86_64 "$OUT/app-x86_64-release.apk"
-          upload_one x86 "$OUT/app-x86-release.apk"
-          upload_one universal "$OUT/app-release.apk"
+          # Upload whatever split-per-abi actually produced: this Flutter
+          # version builds arm64-v8a, armeabi-v7a and x86_64 but NOT 32-bit
+          # x86, so only existing APKs are uploaded and listed in latest.json.
+          for apk in "$OUT"/*-release.apk; do
+            [ -f "$apk" ] || continue
+            base=$(basename "$apk")
+            if [ "$base" = "app-release.apk" ]; then
+              abi="universal"
+            else
+              abi="${base#app-}"
+              abi="${abi%-release.apk}"
+            fi
+            upload_one "$abi" "$apk"
+          done
 
           REL_JSON=$(curl -s \
             -H "Authorization: Bearer $GH_TOKEN" \
