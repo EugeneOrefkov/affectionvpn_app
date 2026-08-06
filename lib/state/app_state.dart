@@ -129,6 +129,7 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
     await VpnService.instance.initialize();
     notifyListeners();
+    unawaited(_measureDelays(method: 'tcp'));
     unawaited(scheduledUpdateCheck());
     _updateCheckTimer = Timer.periodic(
       const Duration(hours: 4),

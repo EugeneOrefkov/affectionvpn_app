@@ -60,6 +60,8 @@ class _ServersScreenState extends State<ServersScreen> {
                         SizedBox(height: 2),
                         Text(
                           'Выберите локацию для подключения',
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: AppColors.textTertiary,
                             fontSize: 13,
@@ -85,21 +87,30 @@ class _ServersScreenState extends State<ServersScreen> {
                           ),
                   ),
                   const SizedBox(width: 4),
-                  IconButton(
+                  OutlinedButton.icon(
                     onPressed: state.isLoadingSubscription
                         ? null
                         : _refresh,
-                    tooltip: 'Обновить подписку',
                     icon: state.isLoadingSubscription
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 14,
+                            height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(
-                            Icons.refresh,
-                            color: AppColors.primary,
-                          ),
+                        : const Icon(Icons.refresh, size: 16),
+                    label: const Text('Обновить подписку'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textPrimary,
+                      backgroundColor: AppColors.surfaceAlt,
+                      side: const BorderSide(color: AppColors.border),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   ),
                 ],
               ),
