@@ -1,9 +1,6 @@
 name: Build & Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -18,9 +15,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # Tag pushes: GITHUB_REF_NAME is the tag (v1.0.15). Manual dispatch: the
-      # version input (1.0.16).
-      VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
+      # The version comes from the workflow_dispatch input. Runs on main so all
+      # GitHub caches (Flutter SDK, Xray AAR, Gradle) are shared across runs.
+      VERSION: ${{ inputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,12 +63,21 @@ jobs:
             echo "AFFECTION_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
           } >> "$HOME/.gradle/gradle.properties"
 
+      - name: Cache built Xray AAR
+        id: cache-xray-aar
+        uses: actions/cache@v4
+        with:
+          path: android/xray-maven
+          key: xray-aar-${{ hashFiles('android/gradle.properties') }}
+
       - name: Setup Go
+        if: steps.cache-xray-aar.outputs.cache-hit != 'true'
         uses: actions/setup-go@v5
         with:
           go-version: '1.26'
 
       - name: Install Android NDK
+        if: steps.cache-xray-aar.outputs.cache-hit != 'true'
         run: |
           set -e
           NDK_DIR="$ANDROID_HOME/ndk/28.2.13676358"
@@ -85,10 +91,21 @@ jobs:
           test -d "$NDK_DIR" || { echo "::error::NDK install failed"; exit 1; }
 
       - name: Build Xray core AAR
+        if: steps.cache-xray-aar.outputs.cache-hit != 'true'
         run: |
           # ANDROID_HOME must be expanded by the shell here: GitHub Actions
           # does NOT expand $VAR references inside the step-level env block.
           ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" scripts/build_xray_android.sh
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle.properties', 'pubspec.lock') }}
+          restore-keys: |
+            gradle-
 
       - name: Build release APK
         run: |
@@ -179,12 +196,13 @@ jobs:
           echo "uploaded: $UP_NAME"
           printf '%b' "$DIAG"
 
+  # Runs in parallel with the APK build: the Linux bundle is the slowest part
+  # to produce locally, and it only needs the GitHub Release (created by the
+  # build job) to exist before uploading, so we poll for it.
   build-linux:
-    needs: build
-    if: success()
     runs-on: ubuntu-latest
     env:
-      VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
+      VERSION: ${{ inputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -198,11 +216,39 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Install Linux build dependencies
+        run: |
+          set -e
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev liblzma-dev ninja-build clang cmake pkg-config
+
       - name: Build Linux bundle
         run: |
           set -o pipefail
           V="${VERSION#v}"
           flutter build linux --release --build-name="$V" 2>&1 | tee /tmp/linux-build.log
+
+      - name: Wait for GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          V="${VERSION#v}"
+          TAG="v$V"
+          for i in $(seq 1 90); do
+            if curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$TAG" | grep -q '"id"'; then
+              echo "release $TAG found"
+              exit 0
+            fi
+            echo "waiting for release $TAG (${i}/90)..."
+            sleep 20
+          done
+          echo "::error::release $TAG was not created within 30 minutes"
+          exit 1
 
       - name: Upload Linux release asset
         shell: bash

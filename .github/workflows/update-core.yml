@@ -60,18 +60,6 @@ jobs:
           git pull --rebase origin main
           git push origin HEAD:main
 
-      - name: Create and push version tag
-        if: steps.detect.outputs.changed == 'true'
-        env:
-          TAG_VERSION: v${{ steps.bump.outputs.TAG_VERSION }}
-        run: |
-          if git rev-parse -q --verify "refs/tags/$TAG_VERSION" > /dev/null; then
-            echo "tag $TAG_VERSION already exists, skipping"
-          else
-            git tag "$TAG_VERSION"
-            git push origin "$TAG_VERSION"
-          fi
-
       - name: Dispatch release build
         if: steps.detect.outputs.changed == 'true'
         env:

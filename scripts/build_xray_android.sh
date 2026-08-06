@@ -119,18 +119,37 @@ build_xray() {
     )
 }
 
-if [ "${XRAY_BUILD_ARM64:-1}" = "1" ]; then
-    build_xray "arm64-v8a" "arm64" "" "aarch64-linux-android21"
-fi
-if [ "${XRAY_BUILD_ARMV7:-1}" = "1" ]; then
-    build_xray "armeabi-v7a" "arm" "7" "armv7a-linux-androideabi21"
-fi
-if [ "${XRAY_BUILD_X86:-1}" = "1" ]; then
-    build_xray "x86" "386" "" "i686-linux-android21"
-fi
-if [ "${XRAY_BUILD_X86_64:-1}" = "1" ]; then
-    build_xray "x86_64" "amd64" "" "x86_64-linux-android21"
-fi
+# The four ABI builds are independent. Run them two at a time (arm64+armv7,
+# then x86+x86_64) to cut wall-clock time without exhausting the 7 GB CI
+# runner. Errors in a background build surface through `wait` and abort the
+# script via `set -e`.
+build_pair() {
+    local pids=()
+    for tuple in "$@"; do
+        if [ "$tuple" = "skip" ]; then
+            continue
+        fi
+        IFS='|' read -r arch goarch goarm target <<< "$tuple"
+        build_xray "$arch" "$goarch" "$goarm" "$target" &
+        pids+=("$!")
+    done
+    for p in "${pids[@]}"; do
+        wait "$p" || exit $?
+    done
+}
+
+arm64_tuple="arm64-v8a|arm64||aarch64-linux-android21"
+armv7_tuple="armeabi-v7a|arm|7|armv7a-linux-androideabi21"
+x86_tuple="x86|386||i686-linux-android21"
+x86_64_tuple="x86_64|amd64||x86_64-linux-android21"
+
+if [ "${XRAY_BUILD_ARM64:-1}" != "1" ]; then arm64_tuple="skip"; fi
+if [ "${XRAY_BUILD_ARMV7:-1}" != "1" ]; then armv7_tuple="skip"; fi
+if [ "${XRAY_BUILD_X86:-1}" != "1" ]; then x86_tuple="skip"; fi
+if [ "${XRAY_BUILD_X86_64:-1}" != "1" ]; then x86_64_tuple="skip"; fi
+
+build_pair "$arm64_tuple" "$armv7_tuple"
+build_pair "$x86_tuple" "$x86_64_tuple"
 
 echo "Fetching latest base AAR from Maven Central..."
 BASE_VERSION="$(curl -fsSL --max-time 30 "$MAVEN_METADATA" | grep -o '<latest>[^<]*</latest>' | head -1 | sed 's/<[^>]*>//g')"
