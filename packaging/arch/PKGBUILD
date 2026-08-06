@@ -9,7 +9,7 @@
 # /usr/bin/xray and the assets under /usr/share/v2ray.
 
 pkgname=affection-vpn
-pkgver=1.0.15
+pkgver=1.0.20
 pkgrel=1
 pkgdesc="Native Linux Xray (VLESS) VPN client with subscription support"
 arch=('x86_64')

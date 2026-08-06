@@ -28,7 +28,7 @@ class AppState extends ChangeNotifier {
       if (results.contains(ConnectivityResult.none)) {
         return;
       }
-      unawaited(_measureDelays(method: 'tcp'));
+      unawaited(_measureDelays(method: 'tcp', force: true));
       unawaited(refreshProxyHost());
     });
   }
@@ -329,7 +329,7 @@ class AppState extends ChangeNotifier {
   void _autoSelectFastest() {
     var bestIndex = -1;
     var bestDelay = 1 << 30;
-    for (var i = 0; i < _servers.length; i++) {
+    for (var i = 2; i < _servers.length; i++) {
       final delay = _servers[i].delayMs;
       if (delay != null && delay > 0 && delay < bestDelay) {
         bestDelay = delay;
@@ -375,7 +375,7 @@ class AppState extends ChangeNotifier {
 
     var bestIndex = -1;
     var bestDelay = 1 << 30;
-    for (var i = 0; i < _servers.length; i++) {
+    for (var i = 2; i < _servers.length; i++) {
       final delay = _servers[i].delayMs;
       if (delay != null && delay > 0 && delay < bestDelay) {
         bestDelay = delay;
