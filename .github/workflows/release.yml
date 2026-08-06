@@ -258,6 +258,25 @@ jobs:
             "https://api.github.com/repos/$REPO/releases/$RELEASE_ID")
           python3 -c "import json,sys; d=json.load(open('/tmp/manifest.json')); rel=json.loads(sys.argv[1]); d['published_at']=rel.get('published_at') or ''; d['changelog']=rel.get('body') or ''; json.dump(d, open('/tmp/manifest.json','w'))" "$REL_JSON"
 
+          # Merge any assets already written by the Linux job (e.g. linux-x64,
+          # linux-deb) so the last job to finish doesn't clobber the other one.
+          curl -sL -o /tmp/latest-existing.json \
+            "https://github.com/$REPO/releases/download/$TAG/latest.json" || true
+          python3 -c "
+import json, sys
+existing = sys.argv[1]
+manifest = sys.argv[2]
+try:
+    old = json.load(open(existing))
+except Exception:
+    old = {'assets': {}}
+d = json.load(open(manifest))
+for k, v in old.get('assets', {}).items():
+    if k not in d['assets']:
+        d['assets'][k] = v
+json.dump(d, open(manifest, 'w'))
+" /tmp/latest-existing.json /tmp/manifest.json
+
           delete_asset latest.json
           curl -s -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
