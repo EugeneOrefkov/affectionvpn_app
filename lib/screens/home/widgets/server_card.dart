@@ -53,7 +53,7 @@ class ServerCard extends StatelessWidget {
                   children: [
                     Text(
                       item?.displayName ?? 'Сервер',
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textPrimary,

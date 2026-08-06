@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../services/core_update_service.dart';
 import '../../services/request_log_service.dart';
 import '../../services/vpn_service.dart';
 import '../../state/app_state.dart';
@@ -19,11 +22,19 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   String _coreVersion = '';
+  int _coreTapCount = 0;
+  Timer? _coreTapTimer;
 
   @override
   void initState() {
     super.initState();
     _loadCoreVersion();
+  }
+
+  @override
+  void dispose() {
+    _coreTapTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadCoreVersion() async {
@@ -34,6 +45,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() => _coreVersion = match?.group(1) ?? version.trim());
       }
     } catch (_) {}
+  }
+
+  /// Five quick taps on the core version open the experimental-core panel.
+  void _onCoreTap() {
+    _coreTapTimer?.cancel();
+    _coreTapTimer = Timer(const Duration(seconds: 3), () {
+      _coreTapCount = 0;
+    });
+    _coreTapCount++;
+    if (_coreTapCount >= 5) {
+      _coreTapCount = 0;
+      _coreTapTimer?.cancel();
+      _openExperimentalCoreSheet();
+    }
+  }
+
+  Future<void> _openExperimentalCoreSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const _ExperimentalCoreSheet(),
+    );
+    _loadCoreVersion();
   }
 
   @override
@@ -122,6 +159,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ],
                         ),
                       ),
+                      const Divider(height: 1),
+                      _SwitchRow(
+                        icon: Icons.sync,
+                        title: 'Автообновление подписки',
+                        subtitle: 'Обновлять трафик и срок действия каждый час',
+                        value: state.autoRefreshSubscription,
+                        onChanged: state.setAutoRefreshSubscription,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -207,10 +252,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const _SectionTitle('О приложении'),
                   _Card(
                     children: [
-                      _InfoRow(
-                        icon: Icons.shield_outlined,
-                        label: 'Ядро Xray',
-                        value: _coreVersion.isEmpty ? '…' : _coreVersion,
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _onCoreTap,
+                        child: _InfoRow(
+                          icon: Icons.shield_outlined,
+                          label: 'Ядро Xray',
+                          value: _coreVersion.isEmpty ? '…' : _coreVersion,
+                        ),
                       ),
                       const Divider(height: 1),
                       _InfoRow(
@@ -735,6 +784,322 @@ class _ActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
       ),
+    );
+  }
+}
+
+class _ExperimentalCoreSheet extends StatefulWidget {
+  const _ExperimentalCoreSheet();
+
+  @override
+  State<_ExperimentalCoreSheet> createState() => _ExperimentalCoreSheetState();
+}
+
+class _ExperimentalCoreSheetState extends State<_ExperimentalCoreSheet> {
+  bool? _supported;
+  String? _installed;
+  String? _latest;
+  String? _active;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final service = CoreUpdateService.instance;
+    final supported = await service.isSupported();
+    String? installed;
+    String? latest;
+    String? active;
+    if (supported) {
+      installed = await service.installedVersion();
+      latest = await service.fetchLatestVersion();
+      try {
+        final v = await VpnService.instance.getCoreVersion();
+        active =
+            RegExp(r'(\d+\.\d+\.\d+)').firstMatch(v)?.group(1) ?? v.trim();
+      } catch (_) {}
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _supported = supported;
+      _installed = installed;
+      _latest = latest;
+      _active = active;
+    });
+  }
+
+  Future<void> _install() async {
+    final version = _latest;
+    if (version == null || _busy) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await CoreUpdateService.instance.install(version);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _installed = version;
+        _busy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Экспериментальное ядро установлено. Переподключитесь для применения.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '$e';
+        });
+      }
+    }
+  }
+
+  Future<void> _reset() async {
+    if (_busy) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await CoreUpdateService.instance.reset();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _installed = null;
+        _busy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Стандартное ядро восстановлено. Переподключитесь для применения.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '$e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final supported = _supported;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.science_outlined,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Экспериментальное ядро',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(
+                    Icons.close,
+                    color: AppColors.textTertiary,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (supported == null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else if (!supported)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'Экспериментальное ядро недоступно для этого устройства',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              )
+            else ...[
+              if (_active != null)
+                _CoreStatusLine(label: 'Активное ядро', value: _active!),
+              if (_installed != null) ...[
+                const SizedBox(height: 6),
+                _CoreStatusLine(
+                  label: 'Экспериментальное',
+                  value: _installed!,
+                  highlight: true,
+                ),
+              ],
+              const SizedBox(height: 14),
+              if (_latest != null)
+                _CoreStatusLine(
+                  label: 'Доступно',
+                  value: 'v$_latest',
+                  valueColor: AppColors.primary,
+                )
+              else
+                const Text(
+                  'Не удалось получить последнюю версию',
+                  style: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 12,
+                  ),
+                ),
+              const SizedBox(height: 18),
+              if (_busy)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _latest == null ? null : _install,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.download, size: 18),
+                    label: Text(
+                      _installed == null
+                          ? 'Установить экспериментальное ядро'
+                          : 'Обновить до последней версии',
+                    ),
+                  ),
+                ),
+                if (_installed != null) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _reset,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                        side: const BorderSide(color: AppColors.border),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.restart_alt, size: 18),
+                      label: const Text('Вернуть стандартное ядро'),
+                    ),
+                  ),
+                ],
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: AppColors.danger,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              const Text(
+                'Экспериментальная сборка может быть нестабильной. '
+                'После установки переподключитесь для применения.',
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CoreStatusLine extends StatelessWidget {
+  const _CoreStatusLine({
+    required this.label,
+    required this.value,
+    this.highlight = false,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final bool highlight;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveColor = valueColor ??
+        (highlight ? AppColors.accent : AppColors.textPrimary);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: effectiveColor,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }

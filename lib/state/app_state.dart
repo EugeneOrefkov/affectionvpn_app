@@ -94,6 +94,12 @@ class AppState extends ChangeNotifier {
 
   bool get showIp => _storage.showIp;
   bool get requestLogEnabled => _storage.requestLogEnabled;
+  bool get autoRefreshSubscription => _storage.autoRefreshSubscription;
+
+  Future<void> setAutoRefreshSubscription(bool value) async {
+    await _storage.setAutoRefreshSubscription(value);
+    notifyListeners();
+  }
 
   String get proxyLogin => _storage.proxyLogin;
   String get proxyPassword => _storage.proxyPassword;
@@ -127,6 +133,10 @@ class AppState extends ChangeNotifier {
       const Duration(hours: 4),
       (_) => unawaited(scheduledUpdateCheck()),
     );
+    _subscriptionRefreshTimer = Timer.periodic(
+      const Duration(hours: 1),
+      (_) => unawaited(_scheduledSubscriptionRefresh()),
+    );
     _autoSelectTimer = Timer.periodic(
       _autoSelectInterval,
       (_) => unawaited(_autoSelectMonitor()),
@@ -134,7 +144,19 @@ class AppState extends ChangeNotifier {
   }
 
   Timer? _updateCheckTimer;
+  Timer? _subscriptionRefreshTimer;
   Timer? _autoSelectTimer;
+
+  Future<void> _scheduledSubscriptionRefresh() async {
+    if (!_storage.autoRefreshSubscription || _subscriptionUrl == null) {
+      return;
+    }
+    try {
+      await refreshSubscription();
+    } catch (_) {
+      // A failed background refresh must not disturb the user.
+    }
+  }
 
   Future<void> scheduledUpdateCheck() async {
     final last = _storage.lastUpdateCheck;
@@ -420,9 +442,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _ensureProxyCredentials() async {
-    if (_storage.proxyLogin.isNotEmpty && _storage.proxyPassword.isNotEmpty) {
-      return;
-    }
+    // Rotate the credentials on every proxy session so a leaked login cannot
+    // be reused across connections.
     const chars =
         'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
     final random = Random.secure();
@@ -611,6 +632,7 @@ class AppState extends ChangeNotifier {
           }
           notifyListeners();
         },
+        expectedSha256: update.sha256,
       );
       _downloadedApkPath = path;
       _downloadProgress = 1;
@@ -643,6 +665,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _connectivitySub?.cancel();
     _updateCheckTimer?.cancel();
+    _subscriptionRefreshTimer?.cancel();
     _autoSelectTimer?.cancel();
     super.dispose();
   }

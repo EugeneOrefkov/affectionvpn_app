@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +9,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/config/app_config.dart';
+import '../core/utils/device_abi.dart';
 import '../models/update_info.dart';
 import 'installer_service.dart';
 
@@ -18,49 +20,76 @@ class UnknownSourceInstallException implements Exception {
   String toString() => 'Установка из неизвестных источников заблокирована';
 }
 
+class ChecksumMismatchException implements Exception {
+  const ChecksumMismatchException();
+
+  @override
+  String toString() => 'Проверка целостности APK не пройдена';
+}
+
 class UpdateService {
   UpdateService._();
   static final UpdateService instance = UpdateService._();
 
   static const _repo = '${AppConfig.githubOwner}/${AppConfig.githubRepo}';
   static const _headers = {
-    'Accept': 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'AffectionVPN/1.0 (Xray; VLESS)',
   };
 
+  /// The release manifest is served as the `latest.json` asset of the latest
+  /// GitHub release, so it is read without hitting the rate-limited GitHub
+  /// API: https://github.com/{owner}/{repo}/releases/latest/download/latest.json
+  static const _manifestUrl =
+      'https://github.com/$_repo/releases/latest/download/latest.json';
+
   Future<UpdateInfo?> checkForUpdate({required String currentVersion}) async {
-    final url = 'https://api.github.com/repos/$_repo/releases/latest';
     final response = await http
-        .get(Uri.parse(url), headers: _headers)
+        .get(Uri.parse(_manifestUrl), headers: _headers)
         .timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 404) {
       return null;
     }
     if (response.statusCode != 200) {
-      throw Exception('GitHub ответил: ${response.statusCode}');
+      throw Exception('Проверка обновлений ответила: ${response.statusCode}');
     }
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final abi = await deviceAbiKey();
+    return parseManifest(data, currentVersion: currentVersion, abi: abi);
+  }
 
-    String? apkUrl;
-    int? size;
-    for (final asset in data['assets'] as List? ?? const []) {
-      final name = ((asset as Map<String, dynamic>)['name'] as String?) ?? '';
-      if (name.toLowerCase().endsWith('.apk')) {
-        apkUrl = asset['browser_download_url'] as String?;
-        size = asset['size'] as int?;
-        break;
-      }
-    }
-    if (apkUrl == null || apkUrl.isEmpty) {
+  /// Turns a decoded `latest.json` manifest into an [UpdateInfo] for the given
+  /// device ABI, falling back to the universal asset. Null when the manifest
+  /// is not newer than [currentVersion] or carries no usable APK.
+  @visibleForTesting
+  static UpdateInfo? parseManifest(
+    Map<String, dynamic> data, {
+    required String currentVersion,
+    required String abi,
+  }) {
+    final version = normalizeVersion((data['version'] as String?) ?? '');
+    if (version.isEmpty || !_isNewer(version, currentVersion)) {
       return null;
     }
 
-    final tag = (data['tag_name'] as String?) ?? '';
-    final version = _normalizeVersion(tag);
-    if (version.isEmpty || !_isNewer(version, currentVersion)) {
+    final assets = data['assets'] as Map<String, dynamic>? ?? const {};
+    Map<String, dynamic>? asset;
+    var assetKey = abi;
+    if (assets[abi] is Map<String, dynamic>) {
+      asset = assets[abi] as Map<String, dynamic>;
+    } else {
+      assetKey = 'universal';
+      if (assets['universal'] is Map<String, dynamic>) {
+        asset = assets['universal'] as Map<String, dynamic>;
+      }
+    }
+    if (asset == null) {
+      return null;
+    }
+
+    final apkUrl = asset['apk_url'] as String?;
+    if (apkUrl == null || apkUrl.isEmpty) {
       return null;
     }
 
@@ -68,16 +97,19 @@ class UpdateService {
     return UpdateInfo(
       version: version,
       apkUrl: apkUrl,
-      tagName: tag,
-      changelog: data['body'] as String?,
+      tagName: data['tag'] as String?,
+      changelog: data['changelog'] as String?,
       publishedAt: published != null ? DateTime.tryParse(published) : null,
-      size: size,
+      size: (asset['size'] as num?)?.toInt(),
+      sha256: asset['sha256'] as String?,
+      assetKey: assetKey,
     );
   }
 
   Future<String> download(
     String url, {
     void Function(int received, int total)? onProgress,
+    String? expectedSha256,
   }) async {
     final dir = await getApplicationDocumentsDirectory();
     final path = '${dir.path}/affection_vpn_update.apk';
@@ -106,7 +138,13 @@ class UpdateService {
     }
 
     if (total > 0 && received < total) {
+      await file.delete();
       throw Exception('Загрузка прервана');
+    }
+
+    if (!await _verifySha256(path, expectedSha256)) {
+      await file.delete();
+      throw const ChecksumMismatchException();
     }
     return path;
   }
@@ -141,11 +179,24 @@ class UpdateService {
     }
   }
 
+  Future<bool> _verifySha256(String path, String? expected) async {
+    if (expected == null || expected.trim().isEmpty) {
+      return true;
+    }
+    final bytes = await File(path).readAsBytes();
+    return sha256Hex(bytes) == expected.trim().toLowerCase();
+  }
+
+  /// SHA-256 of [bytes] as a lower-case hex string.
+  @visibleForTesting
+  static String sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
+
   static void _log(String message) {
     debugPrint(message);
   }
 
-  String _normalizeVersion(String tag) {
+  @visibleForTesting
+  static String normalizeVersion(String tag) {
     var v = tag.trim().toLowerCase();
     if (v.startsWith('v')) {
       v = v.substring(1);
@@ -158,7 +209,7 @@ class UpdateService {
         '${match.group(3) ?? '0'}';
   }
 
-  bool _isNewer(String candidate, String current) {
+  static bool _isNewer(String candidate, String current) {
     final c = _parse(candidate);
     final cur = _parse(current);
     if (c == null || cur == null) {
@@ -172,7 +223,7 @@ class UpdateService {
     return false;
   }
 
-  List<int>? _parse(String version) {
+  static List<int>? _parse(String version) {
     final parts = version.split('.').map(int.tryParse).toList();
     if (parts.any((p) => p == null)) {
       return null;

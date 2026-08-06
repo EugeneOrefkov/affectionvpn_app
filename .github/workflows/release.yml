@@ -107,7 +107,7 @@ jobs:
           restore-keys: |
             gradle-
 
-      - name: Build release APK
+      - name: Build release APKs
         run: |
           set -o pipefail
           V="${VERSION#v}"
@@ -116,9 +116,16 @@ jobs:
           MINOR="${REST%%.*}"
           PATCH="${REST#*.}"
           BUILD_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          # Split-per-ABI first: each variant carries only its own native libs
+          # so in-app updates are ~4x smaller than the fat APK.
           flutter build apk --release \
             --build-name="$V" \
-            --build-number="$BUILD_CODE" 2>&1 | tee /tmp/build.log
+            --build-number="$BUILD_CODE" \
+            --split-per-abi 2>&1 | tee /tmp/build.log
+          # Fat universal APK for manual installs.
+          flutter build apk --release \
+            --build-name="$V" \
+            --build-number="$BUILD_CODE" 2>&1 | tee -a /tmp/build.log
         env:
           CI: "true"
 
@@ -127,7 +134,10 @@ jobs:
         run: |
           APKSIGNER="$(find "$ANDROID_HOME" -name apksigner -type f 2>/dev/null | sort -V | tail -1)"
           if [ -n "$APKSIGNER" ]; then
-            "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+            for apk in build/app/outputs/flutter-apk/*-release.apk; do
+              echo "verifying $apk"
+              "$APKSIGNER" verify --print-certs "$apk" || exit 1
+            done
           else
             echo "apksigner not found, skipping signature verification"
           fi
@@ -156,45 +166,79 @@ jobs:
           set +e
           V="${VERSION#v}"
           TAG="v$V"
+          REPO="$GITHUB_REPOSITORY"
+          OUT="build/app/outputs/flutter-apk"
           DIAG="cwd: $(pwd)\n"
-          DIAG+="find apk:\n$(find . -name '*.apk' 2>&1)\n"
-          DIAG+="ls dir:\n$(ls -la build/app/outputs/flutter-apk/ 2>&1)\n"
-          APK="$PWD/build/app/outputs/flutter-apk/app-release.apk"
-          DIAG+="APK exists: $(test -f "$APK" && echo yes || echo no)\n"
+          DIAG+="ls dir:\n$(ls -la "$OUT" 2>&1)\n"
+
           RESP=$(curl -s -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             -d "{\"tag_name\":\"$TAG\",\"name\":\"Affection VPN $V\",\"generate_release_notes\":true}" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases")
-          DIAG+="create resp:\n$RESP\n"
+            "https://api.github.com/repos/$REPO/releases")
           RELEASE_ID=$(printf '%s' "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
           if [ -z "$RELEASE_ID" ]; then
             RELEASE_ID=$(curl -s \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+              "https://api.github.com/repos/$REPO/releases/tags/$TAG" \
               | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
           fi
           if [ -z "$RELEASE_ID" ]; then
-            gh issue create --title "Release failed on $TAG" --body "$DIAG"
+            gh issue create --title "Release failed on $TAG" --body "$DIAG\ncreate resp:\n$RESP"
             exit 1
           fi
           DIAG+="release id: $RELEASE_ID\n"
+
+          python3 -c "import json,sys; v,tag=sys.argv[1],sys.argv[2]; json.dump({'version':v,'tag':tag,'published_at':'','changelog':'','assets':{}}, open('/tmp/manifest.json','w'))" "$V" "$TAG"
+
+          upload_one() {
+            local abi="$1" src="$2"
+            local name="affection_vpn-$V-$abi.apk"
+            local sha size upload url
+            if [ ! -f "$src" ]; then
+              echo "::error::missing $src"
+              gh issue create --title "Asset missing on $TAG" --body "$DIAG"
+              exit 1
+            fi
+            sha=$(sha256sum "$src" | cut -d' ' -f1)
+            size=$(stat -c %s "$src")
+            upload=$(curl -s -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary "@$src" \
+              "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=$name")
+            url=$(printf '%s' "$upload" | python3 -c "import json,sys; print(json.load(sys.stdin).get('browser_download_url',''))" 2>/dev/null)
+            if [ -z "$url" ]; then
+              gh issue create --title "Asset upload failed on $TAG" --body "$DIAG\nupload resp:\n$upload"
+              exit 1
+            fi
+            echo "uploaded: $name"
+            python3 -c "import json,sys; abi,url,size,sha=sys.argv[1],sys.argv[2],int(sys.argv[3]),sys.argv[4]; d=json.load(open('/tmp/manifest.json')); d['assets'][abi]={'apk_url':url,'size':size,'sha256':sha}; json.dump(d, open('/tmp/manifest.json','w'))" "$abi" "$url" "$size" "$sha"
+          }
+
+          upload_one arm64-v8a "$OUT/app-arm64-v8a-release.apk"
+          upload_one armeabi-v7a "$OUT/app-armeabi-v7a-release.apk"
+          upload_one x86_64 "$OUT/app-x86_64-release.apk"
+          upload_one x86 "$OUT/app-x86-release.apk"
+          upload_one universal "$OUT/app-release.apk"
+
+          REL_JSON=$(curl -s \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/releases/$RELEASE_ID")
+          python3 -c "import json,sys; d=json.load(open('/tmp/manifest.json')); rel=json.loads(sys.argv[1]); d['published_at']=rel.get('published_at') or ''; d['changelog']=rel.get('body') or ''; json.dump(d, open('/tmp/manifest.json','w'))" "$REL_JSON"
+
           curl -s -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary "@$APK" \
-            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=affection_vpn-$V.apk" \
-            -o /tmp/upload.json
-          DIAG+="upload resp:\n$(cat /tmp/upload.json)\n"
-          UP_NAME=$(python3 -c "import json; d=json.load(open('/tmp/upload.json')); print(d.get('name') or '')" 2>/dev/null)
-          if [ -z "$UP_NAME" ]; then
-            gh issue create --title "Asset upload failed on $TAG" --body "$DIAG"
-            exit 1
-          fi
-          echo "uploaded: $UP_NAME"
-          printf '%b' "$DIAG"
+            -H "Content-Type: application/json" \
+            --data-binary "@/tmp/manifest.json" \
+            "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=latest.json" \
+            -o /tmp/latest-upload.json
+          python3 -c "import json; d=json.load(open('/tmp/latest-upload.json')); assert d.get('name')=='latest.json', d"
+          echo "uploaded: latest.json"
+          cat /tmp/manifest.json
 
   # Runs in parallel with the APK build: the Linux bundle is the slowest part
   # to produce locally, and it only needs the GitHub Release (created by the

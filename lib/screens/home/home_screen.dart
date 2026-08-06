@@ -56,6 +56,22 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  IconButton(
+                    onPressed: state.isLoadingSubscription
+                        ? null
+                        : () => _refreshSubscription(context),
+                    tooltip: 'Обновить подписку',
+                    icon: state.isLoadingSubscription
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(
+                            Icons.refresh,
+                            color: AppColors.primary,
+                          ),
+                  ),
                   _StatusChip(connected: state.isConnected),
                 ],
               ),
@@ -86,13 +102,15 @@ class HomeScreen extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (state.isConnected && server != null) ...[
+                    if (server != null) ...[
                       const SizedBox(height: 6),
                       Text(
                         server.displayName,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
+                        style: TextStyle(
+                          color: state.isConnected
+                              ? AppColors.success
+                              : AppColors.textSecondary,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
@@ -167,6 +185,24 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _refreshSubscription(BuildContext context) async {
+    final state = context.read<AppState>();
+    try {
+      await state.refreshSubscription();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Подписка обновлена')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка обновления: $e')),
+        );
+      }
+    }
   }
 
   String _statusText(AppState state) {
@@ -666,6 +702,7 @@ class _SubscriptionBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final info = this.info;
     final hasInfo = info != null;
 
     return Container(
@@ -695,9 +732,9 @@ class _SubscriptionBanner extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              if (hasInfo)
+              if (hasInfo && info.hasTraffic)
                 Text(
-                  Formatters.percent(info!.used, info!.total ?? 0),
+                  Formatters.percent(info.used, info.total ?? 0),
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
@@ -705,40 +742,50 @@ class _SubscriptionBanner extends StatelessWidget {
                 ),
             ],
           ),
-          if (hasInfo && info!.hasTraffic) ...[
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: (info!.trafficUsedPercent ?? 0) / 100,
-                minHeight: 8,
-                backgroundColor: AppColors.surfaceAlt,
-                valueColor: AlwaysStoppedAnimation(
-                  (info!.trafficUsedPercent ?? 0) >= 85
-                      ? AppColors.danger
-                      : AppColors.primary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${Formatters.bytes(info!.used)} из ${Formatters.bytes(info!.total ?? 0)}',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
+          if (hasInfo) ...[
+            if (info.hasTraffic) ...[
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: (info.trafficUsedPercent ?? 0) / 100,
+                  minHeight: 8,
+                  backgroundColor: AppColors.surfaceAlt,
+                  valueColor: AlwaysStoppedAnimation(
+                    (info.trafficUsedPercent ?? 0) >= 85
+                        ? AppColors.danger
+                        : AppColors.primary,
                   ),
                 ),
-                if (info!.expireDate != null)
-                  Text(
-                    'до ${_formatDate(info!.expireDate!)}',
+              ),
+              const SizedBox(height: 10),
+            ],
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    info.hasTraffic
+                        ? '${Formatters.bytes(info.used)} из '
+                            '${Formatters.bytes(info.total ?? 0)}'
+                        : 'Использовано ${Formatters.bytes(info.used)}',
                     style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 12,
                     ),
                   ),
+                ),
+                if (info.expireDate != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    'до ${_formatDate(info.expireDate!)}',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ],
             ),
           ] else

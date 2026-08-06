@@ -22,6 +22,7 @@ class StorageService {
   static const _kDeviceId = 'device_id';
   static const _kShowIp = 'show_ip';
   static const _kRequestLog = 'request_log_enabled';
+  static const _kAutoRefreshSubscription = 'auto_refresh_subscription';
 
   late SharedPreferences _prefs;
 
@@ -125,6 +126,15 @@ class StorageService {
 
   Future<void> setRequestLogEnabled(bool value) async {
     await _prefs.setBool(_kRequestLog, value);
+  }
+
+  /// Whether the subscription is refreshed automatically in the background.
+  /// On by default so traffic/expiry stay fresh.
+  bool get autoRefreshSubscription =>
+      _prefs.getBool(_kAutoRefreshSubscription) ?? true;
+
+  Future<void> setAutoRefreshSubscription(bool value) async {
+    await _prefs.setBool(_kAutoRefreshSubscription, value);
   }
 
   /// Persistent device identifier reported to the subscription server as

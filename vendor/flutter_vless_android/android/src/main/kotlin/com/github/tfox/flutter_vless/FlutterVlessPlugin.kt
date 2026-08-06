@@ -25,7 +25,6 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
 import java.io.BufferedReader
-import java.io.File
 import java.io.InputStreamReader
 import java.util.ArrayList
 import java.util.concurrent.Executors
@@ -202,11 +201,11 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
                 }
             }
             "getCoreVersion" -> {
-                // Returns the version of the underlying libxray.so
+                // Returns the version of the underlying libxray.so (the
+                // experimental core when one is installed).
                 executor.submit {
                     try {
-                        val nativeLibraryDir = context.applicationInfo.nativeLibraryDir
-                        val xrayExecutable = File(nativeLibraryDir, "libxray.so")
+                        val xrayExecutable = XrayCoreManager.resolveXrayExecutable(context)
                         if (xrayExecutable.exists()) {
                             val p = Runtime.getRuntime().exec(arrayOf(xrayExecutable.absolutePath, "-version"))
                             val reader = BufferedReader(InputStreamReader(p.inputStream))

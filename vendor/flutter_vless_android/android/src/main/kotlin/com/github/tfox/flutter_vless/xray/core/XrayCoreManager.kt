@@ -43,6 +43,20 @@ object XrayCoreManager {
     private var lastProxyUplink = 0L
     private var lastProxyDownlink = 0L
 
+    /**
+     * Resolves the Xray executable to run. An experimental core installed by
+     * the app (filesDir/xray_core/libxray.so) wins over the one bundled into
+     * the APK; the fallback is the bundled nativeLibraryDir copy.
+     */
+    fun resolveXrayExecutable(context: Context): File {
+        val experimental = File(context.filesDir, "xray_core/libxray.so")
+        if (experimental.exists()) {
+            experimental.setExecutable(true, false)
+            return experimental
+        }
+        return File(context.applicationInfo.nativeLibraryDir, "libxray.so")
+    }
+
     private fun nextFreePort(preferredPort: Int, usedPorts: Set<Int>): Int {
         var port = preferredPort
         while (usedPorts.contains(port)) {
@@ -315,9 +329,8 @@ object XrayCoreManager {
             return false
         }
 
-        // 2. Find Xray executable (libxray.so)
-        val nativeLibraryDir = context.applicationInfo.nativeLibraryDir
-        val xrayExecutable = File(nativeLibraryDir, "libxray.so")
+        // 2. Find Xray executable (experimental core or bundled libxray.so)
+        val xrayExecutable = resolveXrayExecutable(context)
         if (!xrayExecutable.exists()) {
             Log.e(TAG, "Xray executable not found at ${xrayExecutable.absolutePath}")
             // Fallback or error
@@ -513,7 +526,7 @@ object XrayCoreManager {
     fun getV2rayTraffic(context: Context): LongArray {
         if (!isXrayRunning()) return longArrayOf(0, 0, 0, 0)
 
-        val xrayPath = File(context.applicationInfo.nativeLibraryDir, "libxray.so").absolutePath
+        val xrayPath = resolveXrayExecutable(context).absolutePath
         val cmd = arrayListOf(
             xrayPath,
             "api",
@@ -740,7 +753,7 @@ object XrayCoreManager {
             Utilities.copyAssets(context)
             
             // Start Xray process
-            val xrayExecutable = File(context.applicationInfo.nativeLibraryDir, "libxray.so")
+            val xrayExecutable = resolveXrayExecutable(context)
             if (!xrayExecutable.exists()) {
                 Log.e(TAG, "getServerDelay: Xray executable not found")
                 return -1L
