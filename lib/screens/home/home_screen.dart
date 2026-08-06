@@ -56,22 +56,6 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  IconButton(
-                    onPressed: state.isLoadingSubscription
-                        ? null
-                        : () => _refreshSubscription(context),
-                    tooltip: 'Обновить подписку',
-                    icon: state.isLoadingSubscription
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(
-                            Icons.refresh,
-                            color: AppColors.primary,
-                          ),
-                  ),
                   _StatusChip(connected: state.isConnected),
                 ],
               ),
@@ -185,24 +169,6 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _refreshSubscription(BuildContext context) async {
-    final state = context.read<AppState>();
-    try {
-      await state.refreshSubscription();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Подписка обновлена')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка обновления: $e')),
-        );
-      }
-    }
   }
 
   String _statusText(AppState state) {

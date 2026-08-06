@@ -302,6 +302,9 @@ jobs:
           V="${VERSION#v}"
           flutter build linux --release --build-name="$V" 2>&1 | tee /tmp/linux-build.log
 
+      - name: Build Linux .deb package
+        run: make -C linux deb
+
       - name: Wait for GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -323,7 +326,7 @@ jobs:
           echo "::error::release $TAG was not created within 30 minutes"
           exit 1
 
-      - name: Upload Linux release asset
+      - name: Upload Linux release assets
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -331,33 +334,55 @@ jobs:
           set -e
           V="${VERSION#v}"
           TAG="v$V"
-          TARBALL="affection-vpn-$V-linux-x64.tar.gz"
-          tar -czf "/tmp/$TARBALL" -C build/linux/x64/release/bundle .
           RELEASE_ID=$(curl -s \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
             | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
           if [ -z "$RELEASE_ID" ]; then
-            echo "::error::release $TAG not found, cannot upload $TARBALL"
+            echo "::error::release $TAG not found, cannot upload assets"
             exit 1
           fi
-          # Re-runs leave the previous tarball attached; replace it.
-          EXISTING=$(curl -s \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
-            | python3 -c "import json,sys; a=json.load(sys.stdin); print(next((x['id'] for x in a if x['name']=='$TARBALL'), ''))" 2>/dev/null)
-          if [ -n "$EXISTING" ]; then
-            curl -s -X DELETE \
+
+          # Helper: upload (or replace) a single asset
+          upload_asset() {
+            local file="$1"           # path to file on disk
+            local name="$2"           # desired asset name
+            local mime="$3"           # Content-Type
+            # Delete existing asset with the same name
+            local existing
+            existing=$(curl -s \
               -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/$EXISTING" >/dev/null
-            echo "replaced existing asset: $TARBALL"
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
+              | python3 -c "import json,sys; a=json.load(sys.stdin); print(next((x['id'] for x in a if x['name']=='$name'), ''))" 2>/dev/null)
+            if [ -n "$existing" ]; then
+              curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/$existing" >/dev/null
+              echo "replaced existing asset: $name"
+            fi
+            local resp
+            resp=$(curl -s -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Content-Type: $mime" \
+              --data-binary "@$file" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name")
+            if ! python3 -c "import json,sys; d=json.loads('$resp'); assert d.get('name')=='$name', d" 2>/dev/null; then
+              echo "::warning::failed to upload $name: $resp"
+            else
+              echo "uploaded: $name"
+            fi
+          }
+
+          # 1) Portable tarball
+          TARBALL="affection-vpn-$V-linux-x64.tar.gz"
+          tar -czf "/tmp/$TARBALL" -C build/linux/x64/release/bundle .
+          upload_asset "/tmp/$TARBALL" "$TARBALL" "application/gzip"
+
+          # 2) .deb package
+          DEB="affection-vpn_${V}_amd64.deb"
+          DEB_PATH="build/linux/x64/release/$DEB"
+          if [ -f "$DEB_PATH" ]; then
+            upload_asset "$DEB_PATH" "$DEB" "application/vnd.debian.binary-package"
+          else
+            echo "::warning::$DEB_PATH not found, skipping .deb upload"
           fi
-          curl -s -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Content-Type: application/gzip" \
-            --data-binary "@/tmp/$TARBALL" \
-            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$TARBALL" \
-            -o /tmp/linux-upload.json
-          python3 -c "import json; d=json.load(open('/tmp/linux-upload.json')); assert d.get('name')=='$TARBALL', d"
-          echo "uploaded: $TARBALL"

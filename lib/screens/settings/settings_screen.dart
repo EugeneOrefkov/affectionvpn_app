@@ -24,6 +24,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _coreVersion = '';
   int _coreTapCount = 0;
   Timer? _coreTapTimer;
+  bool _coreSheetOpen = false;
 
   @override
   void initState() {
@@ -49,6 +50,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Five quick taps on the core version open the experimental-core panel.
   void _onCoreTap() {
+    if (_coreSheetOpen) {
+      return;
+    }
     _coreTapTimer?.cancel();
     _coreTapTimer = Timer(const Duration(seconds: 3), () {
       _coreTapCount = 0;
@@ -62,14 +66,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openExperimentalCoreSheet() async {
+    _coreSheetOpen = true;
     await showModalBottomSheet<void>(
       context: context,
+      isDismissible: false,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => const _ExperimentalCoreSheet(),
     );
+    _coreSheetOpen = false;
     _loadCoreVersion();
   }
 
@@ -163,7 +170,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _SwitchRow(
                         icon: Icons.sync,
                         title: 'Автообновление подписки',
-                        subtitle: 'Обновлять трафик и срок действия каждый час',
+                        subtitle: 'Обновление подписки происходит каждый час, '
+                            'чтобы получать самые свежие изменения',
                         value: state.autoRefreshSubscription,
                         onChanged: state.setAutoRefreshSubscription,
                       ),
@@ -697,17 +705,17 @@ class _PingMethodSelector extends StatelessWidget {
             children: [
               Expanded(
                 child: _MethodChip(
-                  label: 'TCP',
-                  selected: value == 'tcp',
-                  onTap: () => onChanged('tcp'),
+                  label: 'HTTP GET',
+                  selected: value == 'get',
+                  onTap: () => onChanged('get'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _MethodChip(
-                  label: 'HTTP GET',
-                  selected: value == 'get',
-                  onTap: () => onChanged('get'),
+                  label: 'TCP',
+                  selected: value == 'tcp',
+                  onTap: () => onChanged('tcp'),
                 ),
               ),
             ],

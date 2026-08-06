@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/app_snackbar.dart';
 import '../../../services/installer_service.dart';
 import '../../../services/update_service.dart';
 import '../../../state/app_state.dart';
@@ -33,8 +34,10 @@ class _UpdateSectionState extends State<UpdateSection> {
     } catch (e) {
       if (mounted) {
         setState(() => _checked = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось проверить обновления: $e')),
+        showErrorSnackBar(
+          context,
+          title: 'Не удалось проверить обновления',
+          error: e,
         );
       }
     }
@@ -46,8 +49,10 @@ class _UpdateSectionState extends State<UpdateSection> {
       await state.downloadUpdate();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка загрузки: $e')),
+        showErrorSnackBar(
+          context,
+          title: 'Не удалось скачать обновление',
+          error: e,
         );
       }
     }
@@ -63,8 +68,10 @@ class _UpdateSectionState extends State<UpdateSection> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+        showErrorSnackBar(
+          context,
+          title: 'Не удалось установить обновление',
+          error: e,
         );
       }
     }

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Affection VPN
+Comment=Native Linux Xray (VLESS) VPN client with subscription support
+Exec=/opt/affection-vpn/affection_vpn
+Icon=affection-vpn
+Terminal=false
+Categories=Network;Utility;
+StartupWMClass=dev.affection.affection_vpn

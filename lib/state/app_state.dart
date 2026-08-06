@@ -448,7 +448,7 @@ class AppState extends ChangeNotifier {
         'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
     final random = Random.secure();
     String generate() => List.generate(
-          6,
+          12,
           (_) => chars[random.nextInt(chars.length)],
         ).join();
     await _storage.setProxyCredentials(generate(), generate());
