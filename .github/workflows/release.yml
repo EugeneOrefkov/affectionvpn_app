@@ -388,6 +388,17 @@ jobs:
           fi
 
           # 3) Update latest.json with Linux assets
+          delete_asset() {
+            local name="$1" existing
+            existing=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets?per_page=100" \
+              | python3 -c "import json,sys; a=json.load(sys.stdin); print(next((x['id'] for x in a if x['name']=='$name'), ''))" 2>/dev/null)
+            if [ -n "$existing" ]; then
+              curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$REPO/releases/assets/$existing" >/dev/null
+              echo "replaced existing asset: $name"
+            fi
+          }
           TAR_PATH="/tmp/affection-vpn-$V-linux-x64.tar.gz"
           DEB_PATH="build/linux/x64/release/affection-vpn_${V}_amd64.deb"
           REPO="$GITHUB_REPOSITORY"
