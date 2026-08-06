@@ -16,17 +16,14 @@ The app bundles the Xray core and installs a real VPN tunnel.
 The Linux build is a native desktop client. It does not bundle Xray —
 the core and geo databases must be installed separately.
 
-#### Arch Linux (recommended)
-
-Install Xray and geo databases, then build the package:
+#### Arch Linux
 
 ```bash
 yay -S xray v2ray-geoip v2ray-domain-list-community
-cd packaging/arch
+git clone https://github.com/EugeneOrefkov/affectionvpn_app.git
+cd affectionvpn_app/packaging/arch
 makepkg -si
 ```
-
-Or use the PKGBUILD directly from an AUR helper once published.
 
 The app finds Xray at `/usr/bin/xray` and geo data under `/usr/share/v2ray`.
 To override the core location, set `FLUTTER_VLESS_XRAY` to a path, or drop a
@@ -38,8 +35,8 @@ alongside.
 Download the `.deb` package from the latest release:
 
 ```bash
-wget https://github.com/EugeneOrefkov/affectionvpn_app/releases/latest/download/affection-vpn_1.0.23_amd64.deb
-sudo dpkg -i affection-vpn_1.0.23_amd64.deb
+wget https://github.com/EugeneOrefkov/affectionvpn_app/releases/latest/download/affection-vpn_1.0.24_amd64.deb
+sudo dpkg -i affection-vpn_1.0.24_amd64.deb
 ```
 
 Install Xray manually:
