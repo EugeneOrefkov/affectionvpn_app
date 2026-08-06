@@ -85,9 +85,10 @@ jobs:
           test -d "$NDK_DIR" || { echo "::error::NDK install failed"; exit 1; }
 
       - name: Build Xray core AAR
-        env:
-          ANDROID_NDK_HOME: "$ANDROID_HOME/ndk/28.2.13676358"
-        run: scripts/build_xray_android.sh
+        run: |
+          # ANDROID_HOME must be expanded by the shell here: GitHub Actions
+          # does NOT expand $VAR references inside the step-level env block.
+          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" scripts/build_xray_android.sh
 
       - name: Build release APK
         run: |
