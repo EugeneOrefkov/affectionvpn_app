@@ -262,20 +262,7 @@ jobs:
           # linux-deb) so the last job to finish doesn't clobber the other one.
           curl -sL -o /tmp/latest-existing.json \
             "https://github.com/$REPO/releases/download/$TAG/latest.json" || true
-          python3 -c "
-import json, sys
-existing = sys.argv[1]
-manifest = sys.argv[2]
-try:
-    old = json.load(open(existing))
-except Exception:
-    old = {'assets': {}}
-d = json.load(open(manifest))
-for k, v in old.get('assets', {}).items():
-    if k not in d['assets']:
-        d['assets'][k] = v
-json.dump(d, open(manifest, 'w'))
-" /tmp/latest-existing.json /tmp/manifest.json
+          python3 -c "import json,sys; existing=sys.argv[1]; manifest=sys.argv[2]; old=(json.load(open(existing)) if __import__('os').path.exists(existing) and __import__('os').path.getsize(existing)>0 else {'assets':{}}); d=json.load(open(manifest)); [d['assets'].__setitem__(k,v) for k,v in old.get('assets',{}).items() if k not in d['assets']]; json.dump(d,open(manifest,'w'))" /tmp/latest-existing.json /tmp/manifest.json
 
           delete_asset latest.json
           curl -s -X POST \
