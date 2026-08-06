@@ -57,11 +57,28 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "Affection VPN");
+
+    // Hide the bulky stock title text and the subtitle; the app draws its own
+    // branded bar inside Flutter, matching the Android home page top-left.
+    gtk_header_bar_set_title(header_bar, nullptr);
+    gtk_header_bar_set_subtitle(header_bar, nullptr);
+
+    // Custom title slot — embed the app icon so the title bar reads as a
+    // compact logo rather than a wide "Affection VPN" text caption that
+    // duplicated the in-app header.
+    GtkWidget* icon_widget = gtk_image_new_from_icon_name(
+        "affection-vpn", GTK_ICON_SIZE_LARGE_TOOLBAR);
+    gtk_image_set_pixel_size(GTK_IMAGE(icon_widget), 22);
+    gtk_widget_show(icon_widget);
+    gtk_header_bar_pack_start(header_bar, icon_widget);
+
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "Affection VPN");
+    // On non-GNOME X11 window managers (tiling, etc.) the .desktop file already
+    // supplies an icon and name, so the OS-drawn frame is acceptable — no
+    // manual title text needed.
+    gtk_window_set_title(window, nullptr);
   }
 
   gtk_window_set_default_size(window, 1280, 720);

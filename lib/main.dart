@@ -5,6 +5,7 @@ import 'package:flutter_vless_platform_interface/flutter_vless_platform_interfac
 import 'package:provider/provider.dart';
 
 import 'core/theme/app_theme.dart';
+import 'core/utils/messenger.dart';
 import 'screens/splash_screen.dart';
 import 'services/linux_vless_platform.dart';
 import 'state/app_state.dart';
@@ -27,6 +28,7 @@ class AffectionVpnApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Affection VPN',
         debugShowCheckedModeBanner: false,
+        scaffoldMessengerKey: scaffoldMessengerKey,
         theme: AppTheme.dark(),
         home: const SplashScreen(),
       ),

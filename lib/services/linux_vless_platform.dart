@@ -34,6 +34,15 @@ class LinuxVlessPlatform extends VlessPlatform {
   static const _connectTimeout = Duration(seconds: 2);
 
   Process? _process;
+  // Monotonically incremented per start() so the exit handler can detect
+  // stale closures. When start() succeeds and immediately fails (and start()
+  // is re-entered), only the latest _process is "current" and any pending
+  // exit callbacks for previous processes must not flip the UI state.
+  int _exitGeneration = 0;
+  // Set by stopVless() so a crash exit triggered just after the user hits
+  // Stop does not double-emit DISCONNECTED on top of the one stopVless
+  // already pushed to the UI.
+  bool _stopping = false;
   String? _xrayPath;
   String? _assetDir;
   String? _configPath;
@@ -102,6 +111,8 @@ class LinuxVlessPlatform extends VlessPlatform {
     File(_configPath!).writeAsStringSync(prepared.config);
 
     _emit(VlessStatus(state: 'CONNECTING'));
+    _exitGeneration++;
+    final generation = _exitGeneration;
     _process = await Process.start(
       xray,
       ['run', '-config', _configPath!],
@@ -109,7 +120,13 @@ class LinuxVlessPlatform extends VlessPlatform {
     );
     _process!.stdout.transform(utf8.decoder).listen(_log);
     _process!.stderr.transform(utf8.decoder).listen(_log);
-    unawaited(_process!.exitCode.then((_) => _onProcessExit()));
+    unawaited(
+      _process!.exitCode.then((_) {
+        if (_exitGeneration == generation) {
+          _onProcessExit();
+        }
+      }),
+    );
 
     final ready = await _waitForPort(_socksPort, _startTimeout);
     if (!ready) {
@@ -138,6 +155,7 @@ class LinuxVlessPlatform extends VlessPlatform {
     _statsTimer?.cancel();
     _statsTimer = null;
     final process = _process;
+    _stopping = process != null;
     _process = null;
     if (process != null) {
       try {
@@ -539,9 +557,17 @@ class LinuxVlessPlatform extends VlessPlatform {
       _resetSystemProxy();
       _proxyApplied = false;
     }
-    if (_process == null) {
-      _emit(VlessStatus(state: 'DISCONNECTED'));
+    // If the user hit Stop, stopVless() already emitted DISCONNECTED and
+    // set the flag — don't double-emit, that would re-notify the UI.
+    if (_stopping) {
+      _stopping = false;
+      return;
     }
+    // Otherwise xray died on its own (bad config, missing geo file,
+    // terminal `kill`) and we must surface that, otherwise the home screen
+    // stays stuck in "Connecting…" forever.
+    _process = null;
+    _emit(VlessStatus(state: 'DISCONNECTED'));
   }
 
   // ---- system proxy (best effort, per desktop environment) ----------------

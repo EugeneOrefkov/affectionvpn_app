@@ -5,7 +5,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_vless/flutter_vless.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,6 +19,7 @@ import '../services/subscription_service.dart';
 import '../services/tunnel_http.dart';
 import '../services/update_service.dart';
 import '../services/vpn_service.dart';
+import '../core/utils/messenger.dart';
 
 enum ConnectionStatus { disconnected, connecting, connected, disconnecting }
 
@@ -457,9 +458,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await vpn.start(server, proxyOnly: proxyOnly, config: config);
-    } catch (_) {
+    } catch (e) {
       _connectionStatus = ConnectionStatus.disconnected;
       notifyListeners();
+      // Surface the actual reason instead of leaving the user staring at a
+      // "Connecting…" spinner that quietly flips back to "Disconnected".
+      // On Linux this is the difference between "the app just doesn't work"
+      // and a clear instruction like "install xray" or "fix config".
+      unawaited(_showConnectionFailure(e.toString()));
     }
   }
 
@@ -540,10 +546,29 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await VpnService.instance.stop();
-    } catch (_) {
+    } catch (e) {
       _connectionStatus = ConnectionStatus.disconnected;
       notifyListeners();
+      unawaited(_showConnectionFailure(e.toString()));
     }
+  }
+
+  /// Bridge to the global ScaffoldMessenger so connection errors that fire
+  /// without a BuildContext (e.g. when the platform start throws inside
+  /// [_connect]) still reach the user as a snackbar.
+  Future<void> _showConnectionFailure(String message) async {
+    final messenger = scaffoldMessengerKey.currentState;
+    if (messenger == null) {
+      return;
+    }
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Не удалось подключиться: $message'),
+        duration: const Duration(seconds: 8),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _stopIfNeeded() async {
@@ -668,6 +693,11 @@ class AppState extends ChangeNotifier {
           }
         }
       } else {
+        // Pass the platform-correct extension into the service so the path
+        // it returns matches what the installer will look for; previously
+        // the service hard-coded `affection_vpn_update.apk` regardless of
+        // platform and `_downloadedApkPath` ended up pointing at the
+        // wrong file (typically a missing `.tar.gz` on Linux).
         await UpdateService.instance.download(update.apkUrl,
             onProgress: (received, total) {
               if (total > 0) {
@@ -675,7 +705,8 @@ class AppState extends ChangeNotifier {
               }
               notifyListeners();
             },
-            expectedSha256: update.sha256);
+            expectedSha256: update.sha256,
+            destPath: destPath);
       }
       _downloadedApkPath = destPath;
       _downloadProgress = 1;

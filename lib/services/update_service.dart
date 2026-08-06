@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -113,9 +114,10 @@ class UpdateService {
     String url, {
     void Function(int received, int total)? onProgress,
     String? expectedSha256,
+    String? destPath,
   }) async {
     final dir = await getApplicationDocumentsDirectory();
-    final path = '${dir.path}/affection_vpn_update.apk';
+    final path = destPath ?? '${dir.path}/affection_vpn_update.apk';
 
     final request = http.Request('GET', Uri.parse(url));
     request.headers['User-Agent'] = 'AffectionVPN/1.0 (Xray; VLESS)';
@@ -130,11 +132,20 @@ class UpdateService {
     final sink = file.openWrite();
     var received = 0;
     try {
-      await for (final chunk in streamed.stream) {
+      // Add a per-chunk idle timeout so a stalled/mid-stream disconnect
+      // does not leave the user with a frozen download button. The total
+      // download is bounded by `request.send` plus this chunk-idle timer.
+      await for (final chunk
+          in streamed.stream.timeout(const Duration(seconds: 30))) {
         received += chunk.length;
         sink.add(chunk);
         onProgress?.call(received, total);
       }
+    } on TimeoutException catch (_) {
+      await sink.flush();
+      await sink.close();
+      await file.delete();
+      throw const SocketException('Загрузка прервана: нет данных больше 30 секунд');
     } finally {
       await sink.flush();
       await sink.close();
