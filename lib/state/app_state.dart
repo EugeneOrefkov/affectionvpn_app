@@ -134,6 +134,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     unawaited(_measureDelays(method: 'tcp'));
     unawaited(scheduledUpdateCheck());
+    unawaited(_refreshSubscriptionOnStartup());
     _updateCheckTimer = Timer.periodic(
       const Duration(hours: 4),
       (_) => unawaited(scheduledUpdateCheck()),
@@ -160,6 +161,22 @@ class AppState extends ChangeNotifier {
       await refreshSubscription();
     } catch (_) {
       // A failed background refresh must not disturb the user.
+    }
+  }
+
+  /// Triggered once at app launch when a saved subscription URL is present.
+  /// The hourly background refresh fires too late to satisfy the home screen
+  /// ("Информация о трафике недоступна" was shown until the user hit the
+  /// manual refresh button), so we fetch up-front and let errors fail
+  /// silently: a one-off startup failure must not surface a snackbar.
+  Future<void> _refreshSubscriptionOnStartup() async {
+    if (_subscriptionUrl == null) {
+      return;
+    }
+    try {
+      await refreshSubscription();
+    } catch (_) {
+      // Keep the cached servers/info; the user can retry from the UI.
     }
   }
 
