@@ -8,96 +8,81 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/utils/device_abi.dart';
 
-/// Downloads and installs an experimental (freshest) Xray core next to the
-/// bundled one. The installed core lives in the app files dir under
-/// `xray_core/libxray.so`; the native plugin prefers it over the bundled
-/// `libxray.so`. Removing the directory reverts to the bundled core.
 class CoreUpdateService {
   CoreUpdateService._();
   static final CoreUpdateService instance = CoreUpdateService._();
 
-  static const _repo = 'XTLS/Xray-core';
+  static const _mavenGroup = 'dev.tfox.fluttervless';
+  static const _mavenArtifact = 'xray-android';
+  static const _mavenMetadata =
+      'https://repo1.maven.org/maven2/$_mavenGroup/$_mavenArtifact/maven-metadata.xml';
   static const _headers = {'User-Agent': 'AffectionVPN/1.0'};
 
-  /// Xray-core publishes Android bundles only for these ABIs. Everything else
-  /// keeps the bundled core.
   static const _abiAssets = {
-    'arm64-v8a': 'Xray-android-arm64-v8a.zip',
-    'x86_64': 'Xray-android-amd64.zip',
+    'arm64-v8a': 'arm64-v8a',
+    'x86_64': 'x86_64',
   };
 
-  /// Latest Xray-core release tag (including prereleases), e.g. "26.7.28".
-  /// Null when the version list cannot be reached.
   Future<String?> fetchLatestVersion() async {
     final response = await http
-        .get(
-          Uri.parse('https://api.github.com/repos/$_repo/releases?per_page=10'),
-          headers: _headers,
-        )
+        .get(Uri.parse(_mavenMetadata), headers: _headers)
         .timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
       return null;
     }
-    return parseLatestVersion(jsonDecode(response.body) as List<dynamic>);
-  }
-
-  /// First Xray version tag in a GitHub releases payload (they are sorted
-  /// newest first), or null when none matches.
-  @visibleForTesting
-  static String? parseLatestVersion(List<dynamic> releases) {
-    for (final release in releases) {
-      final tag = (release['tag_name'] as String?) ?? '';
-      if (RegExp(r'^v?\d+\.\d+\.\d+$').hasMatch(tag)) {
-        return tag.startsWith('v') ? tag.substring(1) : tag;
-      }
+    final versions = RegExp(r'<version>([^<]+)</version>')
+        .allMatches(response.body)
+        .map((m) => m.group(1)!)
+        .toList();
+    if (versions.isEmpty) {
+      return null;
     }
-    return null;
+    return versions.last;
   }
 
-  /// Whether the device can run an experimental core (Xray publishes Android
-  /// bundles only for arm64-v8a and x86_64).
   Future<bool> isSupported() async {
     final abi = await deviceAbiKey();
     return _abiAssets.containsKey(abi);
   }
 
-  /// Installs the given Xray version as the active experimental core.
   Future<void> install(String version) async {
     final abi = await deviceAbiKey();
-    final asset = _abiAssets[abi];
-    if (asset == null) {
+    final jniAbi = _abiAssets[abi];
+    if (jniAbi == null) {
       throw Exception('Экспериментальное ядро недоступно для этого устройства');
     }
-    final url =
-        'https://github.com/$_repo/releases/download/v$version/$asset';
+
+    final aarUrl =
+        'https://repo1.maven.org/maven2/$_mavenGroup/$_mavenArtifact/$version/$_mavenArtifact-$version.aar';
 
     final tempDir = await getTemporaryDirectory();
-    final zipFile = File('${tempDir.path}/xray_experimental_$version.zip');
-    await _download(url, zipFile);
+    final aarFile = File('${tempDir.path}/xray_experimental_$version.aar');
+    await _download(aarUrl, aarFile);
 
     try {
-      final bytes = await zipFile.readAsBytes();
+      final bytes = await aarFile.readAsBytes();
       final archive = ZipDecoder().decodeBytes(bytes);
-      final entry = archive.files
-          .where((f) => f.isFile)
-          .firstWhereOrNull((f) => f.name.endsWith('libxray.so'));
+      final entry = archive.files.firstWhereOrNull(
+        (f) => f.isFile && f.name == 'jni/$jniAbi/libxray.so',
+      );
       if (entry == null) {
-        throw Exception('В архиве не найден libxray.so');
+        throw Exception('В AAR не найден libxray.so для $abi');
       }
 
-      final dir = Directory('${(await getApplicationDocumentsDirectory()).path}/xray_core');
+      final dir = Directory(
+        '${(await getApplicationDocumentsDirectory()).path}/xray_core',
+      );
       await dir.create(recursive: true);
       final target = File('${dir.path}/libxray.so');
       await target.writeAsBytes(entry.content, flush: true);
       await File('${dir.path}/version').writeAsString(version);
     } finally {
-      if (zipFile.existsSync()) {
-        await zipFile.delete();
+      if (aarFile.existsSync()) {
+        await aarFile.delete();
       }
     }
   }
 
-  /// Removes the experimental core; the bundled one is used again.
   Future<void> reset() async {
     final dir = Directory(
       '${(await getApplicationDocumentsDirectory()).path}/xray_core',
@@ -107,7 +92,6 @@ class CoreUpdateService {
     }
   }
 
-  /// Version of the installed experimental core, or null when not installed.
   Future<String?> installedVersion() async {
     final dir = Directory(
       '${(await getApplicationDocumentsDirectory()).path}/xray_core',
