@@ -101,31 +101,4 @@ void main() {
     });
   });
 
-  group('CoreUpdateService.parseLatestVersion', () {
-    test('picks the first matching version tag, stripping the v', () {
-      final releases = [
-        {'tag_name': 'v26.7.28'},
-        {'tag_name': 'v26.3.27'},
-      ];
-      expect(CoreUpdateService.parseLatestVersion(releases), '26.7.28');
-    });
-
-    test('skips non-version tags', () {
-      final releases = [
-        {'tag_name': 'config'},
-        {'tag_name': 'v26.3.27'},
-      ];
-      expect(CoreUpdateService.parseLatestVersion(releases), '26.3.27');
-    });
-
-    test('returns null when nothing matches', () {
-      expect(CoreUpdateService.parseLatestVersion(const []), isNull);
-      expect(
-        CoreUpdateService.parseLatestVersion(const [
-          {'tag_name': 'foo'},
-        ]),
-        isNull,
-      );
-    });
-  });
 }

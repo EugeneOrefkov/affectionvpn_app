@@ -36,7 +36,7 @@ class HomeScreen extends StatelessWidget {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      gradient: AppColors.gradient,
+                      color: Colors.black,
                       borderRadius: BorderRadius.circular(11),
                     ),
                     child: ClipRRect(
