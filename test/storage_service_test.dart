@@ -32,12 +32,12 @@ void main() {
     expect(hwidRegex.hasMatch(first), isTrue);
   });
 
-  test('ping method defaults to fast TCP probe', () async {
+  test('ping method defaults to HTTP GET', () async {
     SharedPreferences.setMockInitialValues({});
     final storage = StorageService.instance;
     await storage.init();
 
-    expect(storage.pingMethod, 'tcp');
+    expect(storage.pingMethod, 'get');
 
     await storage.setPingMethod('get');
     expect(storage.pingMethod, 'get');

@@ -19,6 +19,10 @@ import 'package:path_provider/path_provider.dart';
 class LinuxVlessPlatform extends VlessPlatform {
   LinuxVlessPlatform();
 
+  /// Circular buffer of the last 500 xray process log lines.
+  static final List<String> logs = [];
+  static const int _maxLogLines = 500;
+
   /// Plain loopback HTTP inbound injected into every runtime config. Desktop
   /// apps use it (HTTP proxies support CONNECT), and the delay probes reuse it.
   static const defaultHttpPort = 10809;
@@ -388,8 +392,8 @@ class LinuxVlessPlatform extends VlessPlatform {
     }
     final candidates = [
       '/usr/lib/affection-vpn',
-      // AUR xray pulls the geo data into /usr/share/v2ray (geoip.dat,
-      // geosite.dat); the app passes it via XRAY_LOCATION_ASSET.
+      // Arch: xray package → /usr/share/xray/, AUR → /usr/share/v2ray/
+      '/usr/share/xray',
       '/usr/share/v2ray',
       File(xrayPath).parent.path,
       Platform.environment['XRAY_LOCATION_ASSET'],
@@ -474,7 +478,10 @@ class LinuxVlessPlatform extends VlessPlatform {
   }
 
   void _log(String line) {
-    // Core stderr/stdout noise; kept out of release builds.
+    logs.add(line);
+    if (logs.length > _maxLogLines) {
+      logs.removeRange(0, logs.length - _maxLogLines);
+    }
   }
 
   Future<void> _pollStats() async {

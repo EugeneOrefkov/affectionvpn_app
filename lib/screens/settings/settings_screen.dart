@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../services/core_update_service.dart';
+import '../../services/linux_vless_platform.dart';
 import '../../services/request_log_service.dart';
 import '../../services/vpn_service.dart';
 import '../../state/app_state.dart';
@@ -256,6 +258,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                  if (io.Platform.isLinux) ...[
+                    const SizedBox(height: 24),
+                    const _SectionTitle('Логи ядра'),
+                    _Card(
+                      children: [
+                        InkWell(
+                          onTap: LinuxVlessPlatform.logs.isNotEmpty
+                              ? _openCoreLog
+                              : null,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.terminal,
+                                  color: LinuxVlessPlatform.logs.isNotEmpty
+                                      ? AppColors.primary
+                                      : AppColors.textTertiary,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Вывод xray',
+                                        style: TextStyle(
+                                          color: LinuxVlessPlatform
+                                                  .logs.isNotEmpty
+                                              ? AppColors.textPrimary
+                                              : AppColors.textSecondary,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        LinuxVlessPlatform.logs.isNotEmpty
+                                            ? '${LinuxVlessPlatform.logs.length} строк'
+                                            : 'Нет логов',
+                                        style: const TextStyle(
+                                          color: AppColors.textTertiary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Icon(
+                                  Icons.chevron_right,
+                                  color: AppColors.textTertiary,
+                                  size: 20,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   const _SectionTitle('О приложении'),
                   _Card(
@@ -320,6 +386,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (_) => SubscriptionInputScreen(
           initialUrl: state.subscriptionUrl,
           replacesCurrent: true,
+        ),
+      ),
+    );
+  }
+
+  void _openCoreLog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        insetPadding: const EdgeInsets.all(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    'Вывод xray',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    icon: const Icon(Icons.close, color: AppColors.textTertiary, size: 20),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceAlt,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      LinuxVlessPlatform.logs.isEmpty
+                          ? 'Логов нет'
+                          : LinuxVlessPlatform.logs.join('\n'),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );

@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:affection_vpn/services/core_update_service.dart';
 import 'package:affection_vpn/services/update_service.dart';
 
 Map<String, dynamic> _asset(String abi, {String? apkUrl}) {
