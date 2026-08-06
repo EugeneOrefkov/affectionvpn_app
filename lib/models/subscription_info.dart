@@ -50,7 +50,7 @@ class SubscriptionInfo {
       upload: values['upload'],
       download: values['download'],
       total: total,
-      expireDate: values['expire'] != null
+      expireDate: values['expire'] != null && values['expire']! > 0
           ? DateTime.fromMillisecondsSinceEpoch(
               values['expire']! * 1000,
               isUtc: true,

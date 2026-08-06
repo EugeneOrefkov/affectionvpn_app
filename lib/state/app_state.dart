@@ -117,6 +117,7 @@ class AppState extends ChangeNotifier {
     }
     _initialized = true;
     await _storage.init();
+    await _ensureProxyCredentials();
     _subscriptionUrl = _storage.subscriptionUrl;
     _servers = _storage.servers;
     _selectedIndex = _storage.selectedServerIndex;
