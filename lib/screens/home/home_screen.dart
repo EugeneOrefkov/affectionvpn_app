@@ -39,10 +39,14 @@ class HomeScreen extends StatelessWidget {
                       gradient: AppColors.gradient,
                       borderRadius: BorderRadius.circular(11),
                     ),
-                    child: const Icon(
-                      Icons.shield_outlined,
-                      color: Colors.white,
-                      size: 20,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.asset(
+                        'assets/app_icon.png',
+                        width: 38,
+                        height: 38,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
