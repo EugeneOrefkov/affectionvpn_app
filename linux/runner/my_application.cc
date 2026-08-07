@@ -102,7 +102,7 @@ static void setup_tray(MyApplication* self) {
   app_indicator_set_status(self->tray_indicator, APP_INDICATOR_STATUS_ACTIVE);
 }
 
-// Handle window-control calls coming from the Flutter side ("dragWindow",
+// Handle window-control calls coming from the Flutter side ("minimizeWindow",
 // "closeWindow"). Keeping all of this in native code means we do not pull in
 // bitsdojo_window or any other package just to retitle the bar — we already
 // have the GTK window handle.
@@ -111,14 +111,6 @@ static void window_method_call_handler(FlMethodChannel* channel,
                                        gpointer user_data) {
   GtkWindow* window = GTK_WINDOW(user_data);
   const gchar* method = fl_method_call_get_name(method_call);
-  if (g_strcmp0(method, "dragWindow") == 0) {
-    // Begin a window move using GTK; the backend picks X11 vs Wayland
-    // appropriately. GDK_CURRENT_TIME marks this as user-initiated so the
-    // window manager does not refuse the drag.
-    gtk_window_begin_move_drag(window, 1, 0, 0, GDK_CURRENT_TIME);
-    fl_method_call_respond_success(method_call, nullptr, nullptr);
-    return;
-  }
   if (g_strcmp0(method, "minimizeWindow") == 0) {
     gtk_window_iconify(window);
     fl_method_call_respond_success(method_call, nullptr, nullptr);
@@ -130,6 +122,29 @@ static void window_method_call_handler(FlMethodChannel* channel,
     return;
   }
   fl_method_call_respond_not_implemented(method_call, nullptr);
+}
+
+// Native button-press handler for the custom title bar. Intercepts clicks in
+// the top 36 px (title bar area) and starts a window move with the correct
+// event serial — required on Wayland, where the compositor rejects moves
+// triggered from an asynchronous MethodChannel call.
+static gboolean on_view_button_press(GtkWidget* widget,
+                                     GdkEventButton* event,
+                                     gpointer user_data) {
+  GtkWindow* window = GTK_WINDOW(user_data);
+  if (event->y >= 0 && event->y <= 36) {
+    // The button cluster (min/close) lives in the rightmost ~76 px of the
+    // title bar. The button-press handler must skip that zone and return
+    // FALSE so Flutter processes the tap normally.
+    gint w = gtk_widget_get_allocated_width(widget);
+    if (event->x < w - 80) {
+      gtk_window_begin_move_drag(window, event->button,
+                                 event->x_root, event->y_root,
+                                 event->time);
+      return TRUE;
+    }
+  }
+  return FALSE;
 }
 
 // Implements GApplication::activate.
@@ -193,6 +208,11 @@ static void my_application_activate(GApplication* application) {
   g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
+
+  // Intercept button events in the title bar area for native window drag
+  // (avoids the Wayland serial problem of an async MethodChannel roundtrip).
+  g_signal_connect(view, "button-press-event",
+                   G_CALLBACK(on_view_button_press), window);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 

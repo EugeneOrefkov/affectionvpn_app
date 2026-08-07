@@ -34,10 +34,7 @@ class LinuxTitleBar extends StatelessWidget {
             Expanded(
               child: SizedBox(
                 height: height,
-                child: Listener(
-                  behavior: HitTestBehavior.translucent,
-                  onPointerDown: (_) => LinuxWindowBridge.drag(),
-                  child: Padding(
+                child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: showBrand
                         ? Row(
@@ -68,7 +65,6 @@ class LinuxTitleBar extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
             _WindowButton(
               icon: Icons.remove,
               onPressed: _minimize,
