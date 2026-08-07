@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/linux_title_bar.dart';
 import 'agreement_screen.dart';
 import 'subscription_input_screen.dart';
 
@@ -15,12 +16,14 @@ class WelcomeScreen extends StatelessWidget {
         children: [
           const _GlowBackground(),
           SafeArea(
+            bottom: false,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 48),
+                  const LinuxTitleBar(showBrand: false),
+                  const SizedBox(height: 16),
                   Center(
                     child: Container(
                       width: 92,

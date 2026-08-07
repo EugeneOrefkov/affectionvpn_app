@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/linux_title_bar.dart';
 import '../../state/app_state.dart';
 import '../home/home_screen.dart';
 import '../servers/servers_screen.dart';
@@ -45,7 +46,12 @@ class _MainShellState extends State<MainShell> {
     ];
 
     return Scaffold(
-      body: IndexedStack(index: _index, children: pages),
+      body: Column(
+        children: [
+          const LinuxTitleBar(showBrand: true, height: 36),
+          Expanded(child: IndexedStack(index: _index, children: pages)),
+        ],
+      ),
       bottomNavigationBar: _BottomBar(
         index: _index,
         settingsBadge: hasUpdate,

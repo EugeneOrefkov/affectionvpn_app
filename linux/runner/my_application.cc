@@ -11,6 +11,7 @@ struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
   GtkWindow* window;
+  FlMethodChannel* window_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -27,6 +28,36 @@ static gboolean on_window_delete(GtkWidget* widget, GdkEvent* event,
   return TRUE;
 }
 
+// Handle window-control calls coming from the Flutter side ("dragWindow",
+// "closeWindow"). Keeping all of this in native code means we do not pull in
+// bitsdojo_window or any other package just to retitle the bar — we already
+// have the GTK window handle.
+static void window_method_call_handler(FlMethodChannel* channel,
+                                       FlMethodCall* method_call,
+                                       gpointer user_data) {
+  GtkWindow* window = GTK_WINDOW(user_data);
+  const gchar* method = fl_method_call_get_name(method_call);
+  if (g_strcmp0(method, "dragWindow") == 0) {
+    // Begin a window move using GTK; the backend picks X11 vs Wayland
+    // appropriately. GDK_CURRENT_TIME marks this as user-initiated so the
+    // window manager does not refuse the drag.
+    gtk_window_begin_move_drag(window, 1, 0, 0, GDK_CURRENT_TIME);
+    fl_method_call_respond_success(method_call, nullptr, nullptr);
+    return;
+  }
+  if (g_strcmp0(method, "minimizeWindow") == 0) {
+    gtk_window_iconify(window);
+    fl_method_call_respond_success(method_call, nullptr, nullptr);
+    return;
+  }
+  if (g_strcmp0(method, "closeWindow") == 0) {
+    gtk_widget_hide(GTK_WIDGET(window));
+    fl_method_call_respond_success(method_call, nullptr, nullptr);
+    return;
+  }
+  fl_method_call_respond_not_implemented(method_call, nullptr);
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -37,49 +68,11 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Use a header bar when running in GNOME as this is the common style used
-  // by applications and is the setup most users will be using (e.g. Ubuntu
-  // desktop).
-  // If running on X and not using GNOME then just use a traditional title bar
-  // in case the window manager does more exotic layout, e.g. tiling.
-  // If running on Wayland assume the header bar will work (may need changing
-  // if future cases occur).
-  gboolean use_header_bar = TRUE;
-#ifdef GDK_WINDOWING_X11
-  GdkScreen* screen = gtk_window_get_screen(window);
-  if (GDK_IS_X11_SCREEN(screen)) {
-    const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
-    if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
-      use_header_bar = FALSE;
-    }
-  }
-#endif
-  if (use_header_bar) {
-    GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
-    gtk_widget_show(GTK_WIDGET(header_bar));
-
-    // Hide the bulky stock title text and the subtitle; the app draws its own
-    // branded bar inside Flutter, matching the Android home page top-left.
-    gtk_header_bar_set_title(header_bar, nullptr);
-    gtk_header_bar_set_subtitle(header_bar, nullptr);
-
-    // Custom title slot — embed the app icon so the title bar reads as a
-    // compact logo rather than a wide "Affection VPN" text caption that
-    // duplicated the in-app header.
-    GtkWidget* icon_widget = gtk_image_new_from_icon_name(
-        "affection-vpn", GTK_ICON_SIZE_LARGE_TOOLBAR);
-    gtk_image_set_pixel_size(GTK_IMAGE(icon_widget), 22);
-    gtk_widget_show(icon_widget);
-    gtk_header_bar_pack_start(header_bar, icon_widget);
-
-    gtk_header_bar_set_show_close_button(header_bar, TRUE);
-    gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-  } else {
-    // On non-GNOME X11 window managers (tiling, etc.) the .desktop file already
-    // supplies an icon and name, so the OS-drawn frame is acceptable — no
-    // manual title text needed.
-    gtk_window_set_title(window, nullptr);
-  }
+  // Drop both server- and client-side decorations so the bulky GTK title bar
+  // disappears. The Flutter UI supplies its own branded top bar (drag handle
+  // plus window buttons) which is a single pixel-perfect strip instead of the
+  // default OS frame.
+  gtk_window_set_decorated(window, FALSE);
 
   gtk_window_set_default_size(window, 1280, 720);
 
@@ -108,6 +101,18 @@ static void my_application_activate(GApplication* application) {
 
   self->window = window;
   g_signal_connect(window, "delete-event", G_CALLBACK(on_window_delete), nullptr);
+
+  // Set up the MethodChannel bridge for the custom Flutter title bar.
+  g_autoptr(FlEngine) engine = fl_view_get_engine(view);
+  g_autoptr(FlBinaryMessenger) messenger =
+      fl_engine_get_binary_messenger(engine);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  self->window_channel = fl_method_channel_new(
+      messenger, "dev.affection.affection_vpn/window",
+      FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->window_channel, window_method_call_handler, g_object_ref(window),
+      g_object_unref);
 }
 
 // Implements GApplication::local_command_line.
@@ -133,7 +138,8 @@ static gboolean my_application_local_command_line(GApplication* application,
 
 // Implements GApplication::startup.
 static void my_application_startup(GApplication* application) {
-  // Prefer dark theme for the header bar to match the app.
+  // Keep the dark preference so any GTK dialogs (file picker, etc.) match
+  // the in-app dark palette.
   g_object_set(gtk_settings_get_default(),
                "gtk-application-prefer-dark-theme", TRUE, nullptr);
 
@@ -153,6 +159,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->window_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
@@ -165,7 +172,9 @@ static void my_application_class_init(MyApplicationClass* klass) {
   G_OBJECT_CLASS(klass)->dispose = my_application_dispose;
 }
 
-static void my_application_init(MyApplication* self) {}
+static void my_application_init(MyApplication* self) {
+  self->window_channel = nullptr;
+}
 
 MyApplication* my_application_new() {
   // Set the program name to the application ID, which helps various systems
