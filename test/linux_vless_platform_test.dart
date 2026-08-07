@@ -52,7 +52,7 @@ void main() {
       expect(map['api'], {'tag': 'api', 'services': ['StatsService']});
     });
 
-    test('picks the first free ports when config already owns them', () {
+    test('reuses an existing http inbound instead of adding a duplicate', () {
       const config = '''
 {
   "inbounds": [
@@ -67,13 +67,11 @@ void main() {
       final map = jsonDecode(result.config) as Map<String, dynamic>;
       final inbounds = (map['inbounds'] as List).cast<Map>();
 
-      // All three preferred ports are taken, so each new inbound steps up.
-      final httpPorts = inbounds
-          .where((e) => e['protocol'] == 'http')
-          .map((e) => e['port'])
-          .toSet();
-      expect(result.httpPort, 10810);
-      expect(httpPorts, {10809, 10810});
+      // The config already owns an `http` inbound; its port is reused and no
+      // second inbound with the same tag is injected, otherwise Xray aborts
+      // startup with "existing tag found: http".
+      expect(result.httpPort, 10809);
+      expect(inbounds.where((e) => e['tag'] == 'http'), hasLength(1));
 
       expect(result.socksPort, 10900);
       // Reuses the existing api inbound instead of adding a second one.

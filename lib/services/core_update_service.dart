@@ -38,7 +38,11 @@ class CoreUpdateService {
         }
       }
     } catch (_) {}
-    // Fallback: GitHub API if Maven Central is unreachable.
+    // Fallback: Maven metadata was unavailable, so learn which AARs actually
+    // exist by probing the release tags against Maven Central. Returning a
+    // GitHub tag verbatim is wrong — the flutter_vless AARs lag behind the
+    // Xray-core releases and the download would 404 (e.g. GitHub v26.7.28
+    // while Maven only hosts up to 26.7.11).
     try {
       final response = await http
           .get(Uri.parse(_githubReleases), headers: _headers)
@@ -47,8 +51,12 @@ class CoreUpdateService {
         final releases = jsonDecode(response.body) as List<dynamic>;
         for (final release in releases) {
           final tag = (release['tag_name'] as String?) ?? '';
-          if (RegExp(r'^v?\d+\.\d+\.\d+$').hasMatch(tag)) {
-            return tag.startsWith('v') ? tag.substring(1) : tag;
+          if (!RegExp(r'^v?\d+\.\d+\.\d+$').hasMatch(tag)) {
+            continue;
+          }
+          final version = tag.startsWith('v') ? tag.substring(1) : tag;
+          if (await _aarExists(version)) {
+            return version;
           }
         }
       }
@@ -68,8 +76,7 @@ class CoreUpdateService {
       throw Exception('Экспериментальное ядро недоступно для этого устройства');
     }
 
-    final aarUrl =
-        'https://repo1.maven.org/maven2/$_mavenGroup/$_mavenArtifact/$version/$_mavenArtifact-$version.aar';
+    final aarUrl = _aarUrl(version);
 
     final tempDir = await getTemporaryDirectory();
     final aarFile = File('${tempDir.path}/xray_experimental_$version.aar');
@@ -119,8 +126,25 @@ class CoreUpdateService {
     return marker.readAsStringSync().trim();
   }
 
-  Future<void> _download(String url, File target) async {
-    final request = http.Request('GET', Uri.parse(url));
+  Uri _aarUrl(String version) => Uri.parse(
+        'https://repo1.maven.org/maven2/$_mavenGroup/$_mavenArtifact/$version/$_mavenArtifact-$version.aar');
+
+  /// Whether [version] has a published AAR on Maven Central. Used to validate
+  /// fallback candidates so a version that does not exist never reaches the
+  /// download step, which would otherwise fail with a misleading 404.
+  Future<bool> _aarExists(String version) async {
+    try {
+      final response = await http
+          .head(_aarUrl(version), headers: _headers)
+          .timeout(const Duration(seconds: 10));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _download(Uri url, File target) async {
+    final request = http.Request('GET', url);
     request.headers['User-Agent'] = 'AffectionVPN/1.0';
     final streamed = await request.send().timeout(const Duration(seconds: 30));
     if (streamed.statusCode != 200) {

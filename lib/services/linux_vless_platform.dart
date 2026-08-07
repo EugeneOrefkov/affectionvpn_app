@@ -297,15 +297,24 @@ class LinuxVlessPlatform extends VlessPlatform {
     }
 
     // Plain loopback HTTP inbound (CONNECT-capable) for the system proxy and
-    // the delay probes.
-    final httpPort = _nextFree(defaultHttpPort, usedPorts);
-    usedPorts.add(httpPort);
-    inbounds.add({
-      'tag': 'http',
-      'port': httpPort,
-      'listen': '127.0.0.1',
-      'protocol': 'http',
-    });
+    // the delay probes. The upstream config often ships one already (tag
+    // `http`); reusing it — like the api door below — avoids the duplicate-tag
+    // failure Xray raises at startup ("existing tag found: http").
+    int httpPort;
+    final existingHttp =
+        inbounds.where((e) => (e['tag'] as String?) == 'http');
+    if (existingHttp.isNotEmpty) {
+      httpPort = existingHttp.first['port'] as int? ?? defaultHttpPort;
+    } else {
+      httpPort = _nextFree(defaultHttpPort, usedPorts);
+      usedPorts.add(httpPort);
+      inbounds.add({
+        'tag': 'http',
+        'port': httpPort,
+        'listen': '127.0.0.1',
+        'protocol': 'http',
+      });
+    }
 
     // Xray stats API door.
     var apiPort = defaultApiPort;
