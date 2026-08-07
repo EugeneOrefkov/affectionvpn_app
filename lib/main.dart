@@ -12,6 +12,7 @@ import 'screens/splash_screen.dart';
 import 'services/linux_tray.dart';
 import 'services/linux_vless_platform.dart';
 import 'state/app_state.dart';
+import 'package:window_manager/window_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +37,10 @@ class _AffectionVpnAppState extends State<AffectionVpnApp> {
     if (Platform.isLinux) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final state = context.read<AppState>();
+        LinuxTray.instance.onOpen = () {
+          windowManager.show();
+          windowManager.focus();
+        };
         LinuxTray.instance.init(state);
       });
     }

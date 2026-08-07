@@ -32,8 +32,7 @@ class LinuxTray with TrayListener {
     final menu = Menu(
       items: [
         MenuItem(label: 'Открыть', onClick: (_) {
-          windowManager.show();
-          windowManager.focus();
+          onOpen?.call();
         }),
         MenuItem.separator(),
         MenuItem.checkbox(
