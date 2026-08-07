@@ -11,7 +11,7 @@
 # present).
 
 pkgname=affection-vpn
-pkgver=1.0.35
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="Native Linux Xray (VLESS) VPN client with subscription support"
 arch=('x86_64')
@@ -19,6 +19,7 @@ url="https://github.com/EugeneOrefkov/affectionvpn_app"
 license=('custom')
 depends=(
   'gtk3'
+  'libayatana-appindicator'
 )
 optdepends=(
   'v2ray-geoip: fresher geoip database from the system repos'
@@ -29,12 +30,10 @@ source=(
   'affection-vpn.desktop'
   'affection-vpn.png'
 )
-# Binary tarball hash is filled in on release; SKIP keeps makepkg usable until
-# the first publish.
 sha256sums=(
-  'SKIP'
-  'SKIP'
-  'SKIP'
+  '48f9552461aaba9d37732cfe51ea6b105d40e258503fbe5e18c2571b1bfdb9ba'
+  'c609907a827a371fafc466beed43fb412b57d5eac0232fdbe72e306e15d08f46'
+  '3c34e1f298d0c9ea3455d46db6b7759c8211a49e9ec6e44b635fc5c87dfb4180'
 )
 
 package() {

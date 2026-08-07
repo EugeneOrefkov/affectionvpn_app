@@ -10,7 +10,9 @@ makepkg -si
 
 ## Зависимости
 
-Xray-core устанавливается автоматически как зависимость пакета (`xray`, `v2ray-geoip`, `v2ray-domain-list-community` из AUR/extra).
+Пакет тянет `gtk3` и `libayatana-appindicator` (трей). Xray-core и базы geoip/geosite вшиты в тарбол, отдельная установка не нужна.
+
+Опционально можно поставить свежие базы из системных репозиториев (`v2ray-geoip`, `v2ray-domain-list-community`) — приложение предпочитает их, когда они есть в `/usr/share/v2ray`.
 
 ## Запуск
 
