@@ -124,24 +124,25 @@ static void window_method_call_handler(FlMethodChannel* channel,
   fl_method_call_respond_not_implemented(method_call, nullptr);
 }
 
-// GDK-level event filter. Fires before any GtkWidget processing, so the
-// Wayland event serial is still valid and Flutter never sees the event
-// (avoids consuming a GtkWidget signal that Flutter already claimed).
-static GdkFilterReturn on_gdk_filter(GdkXEvent* xevent, GdkEvent* event,
-                                     gpointer user_data) {
+// GtkWindow::event handler. Fires before the event propagates to the
+// child FlView, so Flutter never sees title-bar clicks (they are consumed
+// with TRUE). On Wayland the button-press serial is still the press serial
+// at this stage, so xdg_toplevel_move accepts it every time.
+static gboolean on_window_event(GtkWidget* widget, GdkEvent* event,
+                                gpointer user_data) {
   if (event->type == GDK_BUTTON_PRESS) {
     GdkEventButton* bev = (GdkEventButton*)event;
     if (bev->y >= 0 && bev->y <= 36) {
       GtkWindow* win = GTK_WINDOW(user_data);
-      GdkWindow* gdk_win = gtk_widget_get_window(GTK_WIDGET(win));
-      gint w = gdk_window_get_width(gdk_win);
+      gint w = gtk_widget_get_allocated_width(widget);
       if (bev->x < w - 80) {
-        gtk_window_begin_move_drag(win, bev->button, bev->x_root, bev->y_root, bev->time);
-        return GDK_FILTER_REMOVE;
+        gtk_window_begin_move_drag(win, bev->button, bev->x_root, bev->y_root,
+                                   bev->time);
+        return TRUE;
       }
     }
   }
-  return GDK_FILTER_CONTINUE;
+  return FALSE;
 }
 
 // Implements GApplication::activate.
@@ -206,9 +207,10 @@ static void my_application_activate(GApplication* application) {
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
 
-  // GDK-level filter intercepts button-press events before Flutter sees them.
-  GdkWindow* gdk_win = gtk_widget_get_window(GTK_WIDGET(window));
-  gdk_window_add_filter(gdk_win, on_gdk_filter, window);
+  // GtkWindow::event fires before events reach child FlView, so Flutter
+  // never sees title-bar clicks that we consume with TRUE. Both the serial
+  // (Wayland) and the event coordinates are correct at this stage.
+  g_signal_connect(window, "event", G_CALLBACK(on_window_event), window);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
