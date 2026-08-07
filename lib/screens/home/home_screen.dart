@@ -29,7 +29,7 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
               child: Row(
                 children: [
                   const Spacer(),
@@ -52,7 +52,7 @@ class HomeScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 8),
                     const PowerButton(size: 210),
                     const SizedBox(height: 22),
                     Text(

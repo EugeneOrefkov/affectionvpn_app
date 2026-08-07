@@ -35,9 +35,7 @@ class LinuxTitleBar extends StatelessWidget {
     }
     return SizedBox(
       height: height,
-      child: Container(
-        color: AppColors.background,
-        child: Row(
+      child: Row(
           children: [
             Expanded(
               // Drag handle: native begin_move_drag on the *first* pointer
@@ -91,8 +89,7 @@ class LinuxTitleBar extends StatelessWidget {
             const SizedBox(width: 4),
           ],
         ),
-      ),
-    );
+      );
   }
 
   static void _minimize() {

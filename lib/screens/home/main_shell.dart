@@ -48,7 +48,7 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       body: Column(
         children: [
-          const LinuxTitleBar(showBrand: true, height: 36),
+          const LinuxTitleBar(showBrand: false),
           Expanded(child: IndexedStack(index: _index, children: pages)),
         ],
       ),
