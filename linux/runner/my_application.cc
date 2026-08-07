@@ -20,16 +20,6 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
-static void first_frame_cb(MyApplication* self, FlView* view) {
-  gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
-}
-
-static gboolean on_window_delete(GtkWidget* widget, GdkEvent* event,
-                                 gpointer user_data) {
-  gtk_widget_hide_on_delete(widget);
-  return TRUE;
-}
-
 static void present_window(gpointer user_data) {
   GtkWindow* window = GTK_WINDOW(user_data);
   gtk_window_present(window);
@@ -92,17 +82,15 @@ static void setup_tray(MyApplication* self) {
 
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
-  if (self->window != nullptr) {
-    gtk_window_present(self->window);
+  GList* windows = gtk_application_get_windows(GTK_APPLICATION(application));
+  if (windows) {
+    gtk_window_present(GTK_WINDOW(windows->data));
     return;
   }
+
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Use a header bar when running in GNOME as this is the common style used
-  // by applications. If running on X and not using GNOME then just use a
-  // traditional title bar in case the window manager does more exotic layout.
-  // If running on Wayland assume the header bar will work.
   gboolean use_header_bar = TRUE;
 #ifdef GDK_WINDOWING_X11
   GdkScreen* screen = gtk_window_get_screen(window);
@@ -130,31 +118,29 @@ static void my_application_activate(GApplication* application) {
       project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
-  GdkRGBA background_color;
-  gdk_rgba_parse(&background_color, "#000000");
-  fl_view_set_background_color(view, &background_color);
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
-
-  g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
-                           self);
-  gtk_widget_realize(GTK_WIDGET(view));
+  gtk_widget_show(GTK_WIDGET(view));
+  gtk_widget_show(GTK_WIDGET(window));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 
   self->window = window;
-  g_signal_connect(window, "delete-event", G_CALLBACK(on_window_delete), nullptr);
+  g_signal_connect(window, "delete-event",
+                   G_CALLBACK(+[](GtkWidget* widget, GdkEvent* event,
+                                 gpointer user_data) -> gboolean {
+                     gtk_widget_hide_on_delete(widget);
+                     return TRUE;
+                   }),
+                   nullptr);
 
   FlEngine* engine = fl_view_get_engine(view);
   FlBinaryMessenger* messenger = fl_engine_get_binary_messenger(engine);
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
-
   self->shutdown_channel = fl_method_channel_new(
       messenger, "dev.affection.affection_vpn/shutdown",
       FL_METHOD_CODEC(codec));
-
-  gtk_widget_show(GTK_WIDGET(window));
 
   setup_tray(self);
 }
@@ -172,24 +158,16 @@ static gboolean my_application_local_command_line(GApplication* application,
     return TRUE;
   }
 
-  if (!g_application_get_is_remote(application)) {
-    g_application_activate(application);
-  }
+  g_application_activate(application);
   *exit_status = 0;
 
   return TRUE;
 }
 
 static void my_application_startup(GApplication* application) {
-  // Flutter's GTK embedder has known issues with Wayland input handling
-  // (gdk_device_get_source assertion failures causing freezes on text input).
-  // Force X11 via XWayland until Flutter resolves this upstream.
   if (!g_getenv("GDK_BACKEND")) {
     g_setenv("GDK_BACKEND", "x11", FALSE);
   }
-
-  g_object_set(gtk_settings_get_default(),
-               "gtk-application-prefer-dark-theme", TRUE, nullptr);
 
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
@@ -202,8 +180,6 @@ static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->shutdown_channel);
-  g_clear_object(&self->tray_indicator);
-  g_clear_object(&self->tray_menu);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
@@ -218,9 +194,6 @@ static void my_application_class_init(MyApplicationClass* klass) {
 
 static void my_application_init(MyApplication* self) {
   self->shutdown_channel = nullptr;
-  self->tray_indicator = nullptr;
-  self->tray_menu = nullptr;
-  self->tray_open_item = nullptr;
 }
 
 MyApplication* my_application_new() {
