@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,16 +8,18 @@ import 'package:provider/provider.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/utils/messenger.dart';
+import 'core/window/app_window.dart';
 import 'screens/splash_screen.dart';
 import 'services/linux_vless_platform.dart';
 import 'state/app_state.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isLinux) {
-    VlessPlatform.instance = LinuxVlessPlatform();
-    _registerTrayShutdownBridge();
-  }
+    if (Platform.isLinux) {
+      VlessPlatform.instance = LinuxVlessPlatform();
+      _registerTrayShutdownBridge();
+      await initializeAppWindow();
+    }
   runApp(const AffectionVpnApp());
 }
 
@@ -42,6 +45,7 @@ class AffectionVpnApp extends StatelessWidget {
         scaffoldMessengerKey: scaffoldMessengerKey,
         theme: AppTheme.dark(),
         home: const SplashScreen(),
+        builder: (context, child) => WindowFrame(child: child ?? const SizedBox.shrink()),
       ),
     );
   }
