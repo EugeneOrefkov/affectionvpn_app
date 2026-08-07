@@ -487,15 +487,7 @@ jobs:
 
           sed -i "s/^pkgver=.*/pkgver=$V/" packaging/arch/PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" packaging/arch/PKGBUILD
-          python3 -c "
-import re, sys
-sha256 = sys.argv[1]
-with open('packaging/arch/PKGBUILD') as f:
-    s = f.read()
-s = re.sub(r\"(sha256sums=\\(\\n\\s*')[^']*('\\n)\", r\"\\g<1>\" + sha256 + r\"\\g<2>\", s, count=1)
-with open('packaging/arch/PKGBUILD', 'w') as f:
-    f.write(s)
-" "$SHA256"
+          python3 -c "import re, sys; h=sys.argv[1]; s=open('packaging/arch/PKGBUILD').read(); s=re.sub(r\"(sha256sums=\(\n\s*')[^']*('\\n)\", r'\g<1>'+h+r'\g<2>', s, count=1); open('packaging/arch/PKGBUILD','w').write(s)" "$SHA256"
 
           git add packaging/arch/PKGBUILD
           if git diff --cached --quiet; then
