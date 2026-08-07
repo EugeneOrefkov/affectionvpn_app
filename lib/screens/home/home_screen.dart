@@ -58,7 +58,7 @@ class HomeScreen extends StatelessWidget {
             ),
             Expanded(
               child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
+                physics: const NeverScrollableScrollPhysics(),
                 child: Column(
                   children: [
                     if (state.availableUpdate != null) ...[
