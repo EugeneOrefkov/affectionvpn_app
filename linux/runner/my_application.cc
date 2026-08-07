@@ -142,11 +142,36 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Drop both server- and client-side decorations so the bulky GTK title bar
-  // disappears. The Flutter UI supplies its own branded top bar (drag handle
-  // plus window buttons) which is a single pixel-perfect strip instead of the
-  // default OS frame.
-  gtk_window_set_decorated(window, FALSE);
+  // Hide the OS title bar so only the Flutter custom bar is visible. On X11
+  // gtk_window_set_decorated(FALSE) drops the WM decorations while keeping
+  // resize borders. On Wayland it is ignored by KWin, so the same effect is
+  // achieved by forcing GTK3 into CSD mode with a zero-height hidden header
+  // bar — the compositor then skips its own title bar, and window resizing
+  // still works via KWin's invisible edge handles.
+  GdkDisplay* display = gdk_display_get_default();
+  const gchar* gdk_backend = gdk_display_get_name(display);
+  if (!g_str_has_prefix(gdk_backend, "wayland")) {
+    gtk_window_set_decorated(window, FALSE);
+  } else {
+    GtkWidget* header_bar = gtk_header_bar_new();
+    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header_bar), FALSE);
+    gtk_widget_set_visible(header_bar, FALSE);
+    gtk_widget_set_no_show_all(header_bar, TRUE);
+    gtk_widget_set_size_request(header_bar, -1, 0);
+
+    GtkCssProvider* css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(
+        css,
+        "headerbar { min-height: 0px; padding: 0; margin: 0; "
+        "border: none; background: transparent; }",
+        -1, nullptr);
+    GtkStyleContext* ctx = gtk_widget_get_style_context(header_bar);
+    gtk_style_context_add_provider(ctx, GTK_STYLE_PROVIDER(css),
+                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(css);
+
+    gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
+  }
 
   gtk_window_set_default_size(window, 1280, 720);
 
