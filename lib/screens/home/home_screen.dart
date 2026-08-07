@@ -32,26 +32,7 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: Row(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      'assets/app_icon.png',
-                      width: 38,
-                      height: 38,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Affection VPN',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  const Spacer(),
                   _StatusChip(connected: state.isConnected),
                 ],
               ),
@@ -277,35 +258,27 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: (connected ? AppColors.success : AppColors.textTertiary)
-            .withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: connected ? AppColors.success : AppColors.textTertiary,
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: connected ? AppColors.success : AppColors.textTertiary,
           ),
-          const SizedBox(width: 7),
-          Text(
-            connected ? 'В сети' : 'Офлайн',
-            style: TextStyle(
-              color: connected ? AppColors.success : AppColors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+        ),
+        const SizedBox(width: 7),
+        Text(
+          connected ? 'В сети' : 'Офлайн',
+          style: TextStyle(
+            color: connected ? AppColors.success : AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
