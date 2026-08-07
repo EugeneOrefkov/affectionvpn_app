@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
-import '../core/widgets/linux_title_bar.dart';
 import '../state/app_state.dart';
 import 'home/main_shell.dart';
 import 'onboarding/welcome_screen.dart';
@@ -55,12 +54,8 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          const LinuxTitleBar(showBrand: false),
-          Expanded(
-            child: Center(
-              child: Column(
+      body: Center(
+        child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
@@ -113,9 +108,6 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
       ),
     );
   }
