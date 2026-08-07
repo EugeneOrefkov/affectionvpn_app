@@ -25,6 +25,7 @@ class LinuxTitleBar extends StatelessWidget {
       height: height,
       child: Container(
         decoration: const BoxDecoration(
+          color: AppColors.surface,
           border: Border(
             bottom: BorderSide(color: AppColors.borderSoft, width: 0.5),
           ),
@@ -32,9 +33,11 @@ class LinuxTitleBar extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: SizedBox(
-                height: height,
-                child: Padding(
+              child: MouseRegion(
+                cursor: SystemMouseCursors.move,
+                child: SizedBox(
+                  height: height,
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: showBrand
                         ? Row(
@@ -62,6 +65,7 @@ class LinuxTitleBar extends StatelessWidget {
                             ],
                           )
                         : const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),

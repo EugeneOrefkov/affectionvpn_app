@@ -124,14 +124,18 @@ static void window_method_call_handler(FlMethodChannel* channel,
   fl_method_call_respond_not_implemented(method_call, nullptr);
 }
 
-// GtkWindow::event handler. Fires before the event propagates to the
-// child FlView, so Flutter never sees title-bar clicks (they are consumed
-// with TRUE). On Wayland the button-press serial is still the press serial
-// at this stage, so xdg_toplevel_move accepts it every time.
-static gboolean on_window_event(GtkWidget* widget, GdkEvent* event,
-                                gpointer user_data) {
+// FlView::event handler. Fires before the event reaches the Flutter engine,
+// so we can intercept title-bar clicks while the button-press serial is still
+// valid. On Wayland this is the only way to pass the correct serial to
+// xdg_toplevel_move; doing it later from a MethodChannel loses the serial and
+// the compositor refuses the move.
+static gboolean on_view_event(GtkWidget* widget, GdkEvent* event,
+                              gpointer user_data) {
   if (event->type == GDK_BUTTON_PRESS) {
     GdkEventButton* bev = (GdkEventButton*)event;
+    // The Flutter side draws the custom title bar at the top of the view.
+    // The rightmost ~80 px are the window-control buttons; let those clicks
+    // through to Flutter so minimize/close still work.
     if (bev->y >= 0 && bev->y <= 36) {
       GtkWindow* win = GTK_WINDOW(user_data);
       gint w = gtk_widget_get_allocated_width(widget);
@@ -207,10 +211,11 @@ static void my_application_activate(GApplication* application) {
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
 
-  // GtkWindow::event fires before events reach child FlView, so Flutter
-  // never sees title-bar clicks that we consume with TRUE. Both the serial
-  // (Wayland) and the event coordinates are correct at this stage.
-  g_signal_connect(window, "event", G_CALLBACK(on_window_event), window);
+  // FlView::event fires before the event reaches the Flutter engine. The
+  // view fills the client area, so the coordinates are the same ones the
+  // Flutter title bar is laid out with. Intercepting here keeps the
+  // button-press serial valid for Wayland window moves.
+  g_signal_connect(view, "event", G_CALLBACK(on_view_event), window);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
