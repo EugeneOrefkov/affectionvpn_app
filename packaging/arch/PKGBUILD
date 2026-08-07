@@ -2,11 +2,13 @@
 # Prebuilt by the app's GitHub Actions release workflow and uploaded to the
 # matching GitHub release as affection-vpn-<pkgver>-linux-x64.tar.gz. The
 # bundle is the standard `flutter build linux --release` output
-# (binary + data/ + lib/), installed under /opt/affection-vpn.
+# (binary + data/ + lib/) with the pinned Xray-core runtime and its
+# geoip.dat/geosite.dat databases included, installed under /opt/affection-vpn.
 #
-# The Xray core is NOT bundled: it is pulled from the AUR `xray` package, and
-# the geo databases from the official `extra` repo. The app finds the core at
-# /usr/bin/xray and the assets under /usr/share/v2ray.
+# The Xray core is bundled, so no separate core install is needed. The
+# optional geo packages below only replace the bundled databases with fresher
+# ones from the official `extra` repo (the app prefers /usr/share/v2ray when
+# present).
 
 pkgname=affection-vpn
 pkgver=1.0.35
@@ -17,9 +19,10 @@ url="https://github.com/EugeneOrefkov/affectionvpn_app"
 license=('custom')
 depends=(
   'gtk3'
-  'xray'
-  'v2ray-geoip'
-  'v2ray-domain-list-community'
+)
+optdepends=(
+  'v2ray-geoip: fresher geoip database from the system repos'
+  'v2ray-domain-list-community: fresher geosite database from the system repos'
 )
 source=(
   "affection-vpn-$pkgver-linux-x64.tar.gz::https://github.com/EugeneOrefkov/affectionvpn_app/releases/download/v$pkgver/affection-vpn-$pkgver-linux-x64.tar.gz"
@@ -38,6 +41,9 @@ package() {
   install -d "$pkgdir/opt/affection-vpn"
   cp -r "$srcdir"/data "$srcdir"/lib "$pkgdir/opt/affection-vpn/"
   install -Dm755 "$srcdir/affection_vpn" "$pkgdir/opt/affection-vpn/affection_vpn"
+  install -Dm755 "$srcdir/xray" "$pkgdir/opt/affection-vpn/xray"
+  install -Dm644 "$srcdir/geoip.dat" "$srcdir/geosite.dat" "$srcdir/LICENSE" \
+    "$pkgdir/opt/affection-vpn/"
 
   install -d "$pkgdir/usr/bin"
   ln -s /opt/affection-vpn/affection_vpn "$pkgdir/usr/bin/affection-vpn"

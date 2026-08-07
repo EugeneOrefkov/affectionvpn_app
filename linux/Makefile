@@ -22,11 +22,20 @@ all: build
 
 build:
 	cd "$(ROOT)" && flutter build linux --release --build-name="$(VERSION)"
+	# Stage the pinned xray core + geo databases into the bundle so every
+	# artifact (deb / tar.gz / install) is self-contained. Non-fatal so local
+	# offline builds still work — the app falls back to a system xray.
+	"$(ROOT)/scripts/fetch_xray_linux.sh" || echo "warning: could not stage xray core (offline build?)"
 
 install: build
 	install -d "$(DESTDIR)$(PREFIX)"
 	cp -r "$(BUILD_BUNDLE)"/data "$(BUILD_BUNDLE)"/lib "$(DESTDIR)$(PREFIX)/"
 	install -Dm755 "$(BUILD_BUNDLE)/$(BINARY_NAME)" "$(DESTDIR)$(PREFIX)/$(BINARY_NAME)"
+	@if [ -f "$(BUILD_BUNDLE)/xray" ]; then \
+		echo "installing bundled xray core + geo databases"; \
+		install -Dm755 "$(BUILD_BUNDLE)/xray" "$(DESTDIR)$(PREFIX)/xray"; \
+		install -Dm644 "$(BUILD_BUNDLE)/geoip.dat" "$(BUILD_BUNDLE)/geosite.dat" "$(BUILD_BUNDLE)/LICENSE" "$(DESTDIR)$(PREFIX)/"; \
+	fi
 	install -d "$(DESTDIR)$(BINDIR)"
 	ln -sf "$(PREFIX)/$(BINARY_NAME)" "$(DESTDIR)$(BINDIR)/affection-vpn"
 	ln -sf "$(PREFIX)/$(BINARY_NAME)" "$(DESTDIR)$(BINDIR)/$(BINARY_NAME)"
@@ -53,6 +62,11 @@ deb: build
 	mkdir -p "$(DEB_BUILD_DIR)$(ICON_DIR)"
 	cp -r "$(BUILD_BUNDLE)"/data "$(BUILD_BUNDLE)"/lib "$(DEB_BUILD_DIR)$(PREFIX)/"
 	install -Dm755 "$(BUILD_BUNDLE)/$(BINARY_NAME)" "$(DEB_BUILD_DIR)$(PREFIX)/$(BINARY_NAME)"
+	@if [ -f "$(BUILD_BUNDLE)/xray" ]; then \
+		echo "packaging bundled xray core + geo databases"; \
+		install -Dm755 "$(BUILD_BUNDLE)/xray" "$(DEB_BUILD_DIR)$(PREFIX)/xray"; \
+		install -Dm644 "$(BUILD_BUNDLE)/geoip.dat" "$(BUILD_BUNDLE)/geosite.dat" "$(BUILD_BUNDLE)/LICENSE" "$(DEB_BUILD_DIR)$(PREFIX)/"; \
+	fi
 	ln -sf "$(PREFIX)/$(BINARY_NAME)" "$(DEB_BUILD_DIR)$(BINDIR)/affection-vpn"
 	ln -sf "$(PREFIX)/$(BINARY_NAME)" "$(DEB_BUILD_DIR)$(BINDIR)/$(BINARY_NAME)"
 	install -Dm644 "$(ROOT)/linux/$(DESKTOP_FILE)" "$(DEB_BUILD_DIR)$(DESKTOP_DIR)/$(DESKTOP_FILE)"

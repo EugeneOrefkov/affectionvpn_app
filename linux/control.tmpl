@@ -4,7 +4,6 @@ Architecture: @ARCH@
 Maintainer: Eugene Orefkov
 Installed-Size: @SIZE@
 Depends: libgtk-3-0 (>= 3.16)
-Recommends: xray
 Section: net
 Priority: optional
 Description: Native Linux Xray (VLESS) VPN client with subscription support
@@ -12,5 +11,5 @@ Description: Native Linux Xray (VLESS) VPN client with subscription support
  (VLESS protocol) behind the scenes. Supports subscription import,
  automatic server selection, and per-app VPN routing.
  .
- Xray-core (xray) must be installed separately. On Debian/Ubuntu see:
- https://github.com/XTLS/Xray-install
+ Bundles its own Xray-core runtime and geoip/geosite databases, so no
+ separate core installation is required.

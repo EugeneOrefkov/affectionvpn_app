@@ -325,6 +325,15 @@ jobs:
       - name: Build Linux .deb package
         run: make -C linux deb
 
+      - name: Verify bundled Xray core
+        run: |
+          # make deb rebuilds the bundle via the Makefile's `build` target,
+          # which stages the pinned core; assert it is really there before the
+          # tarball (which is tarred from the same bundle) is uploaded.
+          test -x build/linux/x64/release/bundle/xray
+          test -s build/linux/x64/release/bundle/geoip.dat
+          test -s build/linux/x64/release/bundle/geosite.dat
+
       - name: Wait for GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
