@@ -102,18 +102,15 @@ static void setup_tray(MyApplication* self) {
   app_indicator_set_status(self->tray_indicator, APP_INDICATOR_STATUS_ACTIVE);
 }
 
-// Handle window-control calls coming from the Flutter side ("dragWindow",
-// "minimizeWindow", "closeWindow").
+// Handle window-control calls coming from the Flutter side ("minimizeWindow",
+// "closeWindow"). Window drag is handled by the native event callback
+// (on_view_event) which fires inside GDK event processing and preserves
+// the correct event serial on Wayland.
 static void window_method_call_handler(FlMethodChannel* channel,
                                        FlMethodCall* method_call,
                                        gpointer user_data) {
   GtkWindow* window = GTK_WINDOW(user_data);
   const gchar* method = fl_method_call_get_name(method_call);
-  if (g_strcmp0(method, "dragWindow") == 0) {
-    gtk_window_begin_move_drag(window, 1, 0, 0, GDK_CURRENT_TIME);
-    fl_method_call_respond_success(method_call, nullptr, nullptr);
-    return;
-  }
   if (g_strcmp0(method, "minimizeWindow") == 0) {
     gtk_window_iconify(window);
     fl_method_call_respond_success(method_call, nullptr, nullptr);
@@ -125,6 +122,29 @@ static void window_method_call_handler(FlMethodChannel* channel,
     return;
   }
   fl_method_call_respond_not_implemented(method_call, nullptr);
+}
+
+// Fires inside GDK event processing (after Flutter's own handler), so the
+// Wayland event serial from the current button press is still valid. When
+// the compositor receives xdg_toplevel_move with that serial it accepts the
+// move request — the alternating failure pattern (works every other click)
+// disappears because we no longer rely on a last_button_serial that gets
+// overwritten by release events.
+static gboolean on_view_event(GtkWidget* widget, GdkEvent* event, gpointer user_data) {
+  if (event->type == GDK_BUTTON_PRESS) {
+    GdkEventButton* bev = (GdkEventButton*)event;
+    // Only the top 36 px is the custom title bar.
+    if (bev->y >= 0 && bev->y <= 36) {
+      // The button cluster sits in the rightmost ~80 px; skip it.
+      gint w = gtk_widget_get_allocated_width(widget);
+      if (bev->x < w - 80) {
+        GtkWindow* win = GTK_WINDOW(user_data);
+        gtk_window_begin_move_drag(win, bev->button, bev->x_root, bev->y_root, bev->time);
+        return TRUE;
+      }
+    }
+  }
+  return FALSE;
 }
 
 // Implements GApplication::activate.
@@ -188,6 +208,9 @@ static void my_application_activate(GApplication* application) {
   g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
+
+  // Fires after Flutter's own event handler, preserving the Wayland serial.
+  g_signal_connect_after(view, "event", G_CALLBACK(on_view_event), window);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
