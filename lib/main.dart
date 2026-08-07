@@ -16,15 +16,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isLinux) {
     await windowManager.ensureInitialized();
-    windowManager.waitUntilReadyToShow().then((_) async {
-      await windowManager.setAsFrameless();
-      await windowManager.setPreventClose(true);
-      await windowManager.setMinimumSize(const Size(800, 500));
-      await windowManager.setResizable(true);
-      await windowManager.setSkipTaskbar(false);
-      await windowManager.setTitle('Affection VPN');
-      await windowManager.show();
-    });
+    await windowManager.setMinimumSize(const Size(800, 500));
     VlessPlatform.instance = LinuxVlessPlatform();
     _registerTrayShutdownBridge();
   }
