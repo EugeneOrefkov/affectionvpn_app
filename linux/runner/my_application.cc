@@ -96,31 +96,7 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  GdkDisplay* display = gdk_display_get_default();
-  const gchar* gdk_backend = gdk_display_get_name(display);
-  if (!g_str_has_prefix(gdk_backend, "wayland")) {
-    gtk_window_set_decorated(window, FALSE);
-  } else {
-    GtkWidget* header_bar = gtk_header_bar_new();
-    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header_bar), FALSE);
-    gtk_widget_set_visible(header_bar, FALSE);
-    gtk_widget_set_no_show_all(header_bar, TRUE);
-    gtk_widget_set_size_request(header_bar, -1, 0);
-
-    GtkCssProvider* css = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(
-        css,
-        "headerbar { min-height: 0px; padding: 0; margin: 0; "
-        "border: none; background: transparent; }",
-        -1, nullptr);
-    GtkStyleContext* ctx = gtk_widget_get_style_context(header_bar);
-    gtk_style_context_add_provider(ctx, GTK_STYLE_PROVIDER(css),
-                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-    g_object_unref(css);
-
-    gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-  }
-
+  gtk_window_set_title(window, "Affection VPN");
   gtk_window_set_default_size(window, 1280, 720);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

@@ -16,7 +16,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isLinux) {
     await windowManager.ensureInitialized();
-    await windowManager.setMinimumSize(const Size(800, 500));
+    windowManager.waitUntilReadyToShow().then((_) async {
+      await windowManager.setAsFrameless();
+      await windowManager.setMinimumSize(const Size(800, 500));
+    });
     VlessPlatform.instance = LinuxVlessPlatform();
     _registerTrayShutdownBridge();
   }
