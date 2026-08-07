@@ -763,6 +763,29 @@ class AppState extends ChangeNotifier {
           'Запустите: sudo cp -r $extractDir/. /opt/affection-vpn/');
     }
     Directory(extractDir).deleteSync(recursive: true);
+
+    // Останавливаем туннель и снимаем системный прокси, чтобы свежий
+    // экземпляр стартовал с чистого состояния сети.
+    await _stopIfNeeded();
+
+    // Перезапускаем только что установленный бинарник, чтобы обновление
+    // применилось сразу. Приложение однопанельное (GApplication), поэтому
+    // замене даётся секунда на освобождение D-Bus имени текущим процессом.
+    final exe = Platform.resolvedExecutable;
+    var relaunched = false;
+    if (File(exe).existsSync()) {
+      try {
+        await Process.start('sh', ['-c', r'sleep 1; exec "$0"', exe],
+            mode: ProcessStartMode.detached);
+        relaunched = true;
+      } catch (_) {
+        relaunched = false;
+      }
+    }
+    if (!relaunched) {
+      throw Exception('Обновление установлено. Запустите приложение заново.');
+    }
+    exit(0);
   }
 
   void dismissUpdate() {
