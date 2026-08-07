@@ -32,37 +32,40 @@ class LinuxTitleBar extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: (_) => LinuxWindowBridge.drag(),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: showBrand
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Image.asset(
-                                'assets/app_icon.png',
-                                width: 22,
-                                height: 22,
-                                fit: BoxFit.cover,
+              child: SizedBox(
+                height: height,
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (_) => LinuxWindowBridge.drag(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: showBrand
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Image.asset(
+                                  'assets/app_icon.png',
+                                  width: 22,
+                                  height: 22,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Affection VPN',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.2,
+                              const SizedBox(width: 8),
+                              Text(
+                                'Affection VPN',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                ),
                               ),
-                            ),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),
