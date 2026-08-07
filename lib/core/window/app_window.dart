@@ -38,13 +38,11 @@ class WindowFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!Platform.isLinux) return child;
 
-    return DragToResizeArea(
-      child: Column(
-        children: [
-          const WindowTitleBar(),
-          Expanded(child: child),
-        ],
-      ),
+    return Column(
+      children: [
+        const WindowTitleBar(),
+        Expanded(child: child),
+      ],
     );
   }
 }
