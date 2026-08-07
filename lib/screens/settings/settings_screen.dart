@@ -204,12 +204,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onChanged: state.setAutoConnect,
                       ),
                       const Divider(height: 1),
-                      _SwitchRow(
-                        icon: Icons.remove_road,
-                        title: 'Только прокси',
-                        subtitle: 'Без системного VPN-туннеля',
-                        value: state.proxyOnly,
-                        onChanged: state.setProxyOnly,
+                      _VpnModeSelector(
+                        mode: state.proxyOnly ? VpnMode.proxy : VpnMode.tun,
+                        onChanged: (mode) {
+                          state.setProxyOnly(mode == VpnMode.proxy);
+                        },
                       ),
                       const Divider(height: 1),
                       _SwitchRow(
@@ -1192,6 +1191,77 @@ class _ExperimentalCoreSheetState extends State<_ExperimentalCoreSheet> {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+enum VpnMode { proxy, tun }
+
+class _VpnModeSelector extends StatelessWidget {
+  const _VpnModeSelector({
+    required this.mode,
+    required this.onChanged,
+  });
+
+  final VpnMode mode;
+  final ValueChanged<VpnMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.remove_road, color: AppColors.accent, size: 20),
+              const SizedBox(width: 12),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Режим работы',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Системное прокси или TUN-туннель',
+                    style: TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MethodChip(
+                  label: 'Системное прокси',
+                  selected: mode == VpnMode.proxy,
+                  onTap: () => onChanged(VpnMode.proxy),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MethodChip(
+                  label: 'TUN',
+                  selected: mode == VpnMode.tun,
+                  onTap: () => onChanged(VpnMode.tun),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

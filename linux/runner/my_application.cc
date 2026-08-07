@@ -13,9 +13,12 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
   GtkWindow* window;
   FlMethodChannel* shutdown_channel;
+  FlMethodChannel* tray_channel;
   AppIndicator* tray_indicator;
   GtkWidget* tray_menu;
   GtkWidget* tray_open_item;
+  GtkWidget* tray_proxy_item;
+  GtkWidget* tray_tun_item;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -45,10 +48,20 @@ static void quit_from_tray(gpointer user_data) {
                                   nullptr, on_vpn_stopped_before_quit, self);
 }
 
+static void on_mode_toggled(GtkCheckMenuItem* item, gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  if (!gtk_check_menu_item_get_active(item)) return;
+  const gchar* mode = (item == GTK_CHECK_MENU_ITEM(self->tray_proxy_item))
+                          ? "proxy"
+                          : "tun";
+  g_autoptr(FlValue) args = fl_value_new_map();
+  fl_value_set_string_take(args, "mode", fl_value_new_string(mode));
+  fl_method_channel_invoke_method(self->tray_channel, "modeChanged", args,
+                                  nullptr, nullptr, nullptr);
+}
+
 static void ensure_tray_menu(MyApplication* self) {
-  if (self->tray_menu != nullptr) {
-    return;
-  }
+  if (self->tray_menu != nullptr) return;
   self->tray_menu = gtk_menu_new();
 
   self->tray_open_item = gtk_menu_item_new_with_label("Открыть");
@@ -57,6 +70,27 @@ static void ensure_tray_menu(MyApplication* self) {
   gtk_menu_shell_append(GTK_MENU_SHELL(self->tray_menu),
                         self->tray_open_item);
 
+  gtk_menu_shell_append(GTK_MENU_SHELL(self->tray_menu),
+                        gtk_separator_menu_item_new());
+
+  self->tray_proxy_item =
+      gtk_radio_menu_item_new_with_label(nullptr, "Системное прокси");
+  g_signal_connect(self->tray_proxy_item, "toggled",
+                   G_CALLBACK(on_mode_toggled), self);
+  gtk_menu_shell_append(GTK_MENU_SHELL(self->tray_menu),
+                        self->tray_proxy_item);
+
+  self->tray_tun_item =
+      gtk_radio_menu_item_new_with_label_from_widget(
+          GTK_RADIO_MENU_ITEM(self->tray_proxy_item), "TUN");
+  g_signal_connect(self->tray_tun_item, "toggled",
+                   G_CALLBACK(on_mode_toggled), self);
+  gtk_menu_shell_append(GTK_MENU_SHELL(self->tray_menu),
+                        self->tray_tun_item);
+
+  gtk_menu_shell_append(GTK_MENU_SHELL(self->tray_menu),
+                        gtk_separator_menu_item_new());
+
   GtkWidget* quit_item = gtk_menu_item_new_with_label("Выход");
   g_signal_connect_swapped(quit_item, "activate", G_CALLBACK(quit_from_tray),
                            self);
@@ -64,9 +98,7 @@ static void ensure_tray_menu(MyApplication* self) {
 }
 
 static void setup_tray(MyApplication* self) {
-  if (self->tray_indicator != nullptr) {
-    return;
-  }
+  if (self->tray_indicator != nullptr) return;
   ensure_tray_menu(self);
   G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   self->tray_indicator =
@@ -78,6 +110,33 @@ static void setup_tray(MyApplication* self) {
                                               self->tray_open_item);
   app_indicator_set_menu(self->tray_indicator, GTK_MENU(self->tray_menu));
   app_indicator_set_status(self->tray_indicator, APP_INDICATOR_STATUS_ACTIVE);
+}
+
+// Handler for method calls from Dart on the tray channel.
+static void tray_method_call_cb(FlMethodChannel* channel,
+                                FlMethodCall* method_call,
+                                gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  const gchar* method = fl_method_call_get_name(method_call);
+  g_autoptr(FlMethodResponse) response = nullptr;
+
+  if (g_strcmp0(method, "setMode") == 0) {
+    FlValue* args = fl_method_call_get_args(method_call);
+    const gchar* mode = fl_value_get_string(fl_value_lookup_string(args, "mode"));
+
+    if (g_strcmp0(mode, "proxy") == 0) {
+      gtk_check_menu_item_set_active(
+          GTK_CHECK_MENU_ITEM(self->tray_proxy_item), TRUE);
+    } else if (g_strcmp0(mode, "tun") == 0) {
+      gtk_check_menu_item_set_active(
+          GTK_CHECK_MENU_ITEM(self->tray_tun_item), TRUE);
+    }
+    response = FL_METHOD_RESPONSE(
+        fl_method_success_response_new(fl_value_new_bool(true)));
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+  fl_method_call_respond(method_call, response, nullptr);
 }
 
 static void my_application_activate(GApplication* application) {
@@ -129,7 +188,7 @@ static void my_application_activate(GApplication* application) {
   self->window = window;
   g_signal_connect(window, "delete-event",
                    G_CALLBACK(+[](GtkWidget* widget, GdkEvent* event,
-                                 gpointer user_data) -> gboolean {
+                                  gpointer user_data) -> gboolean {
                      gtk_widget_hide_on_delete(widget);
                      return TRUE;
                    }),
@@ -141,6 +200,12 @@ static void my_application_activate(GApplication* application) {
   self->shutdown_channel = fl_method_channel_new(
       messenger, "dev.affection.affection_vpn/shutdown",
       FL_METHOD_CODEC(codec));
+
+  self->tray_channel = fl_method_channel_new(
+      messenger, "dev.affection.affection_vpn/tray",
+      FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->tray_channel, tray_method_call_cb, self, nullptr);
 
   setup_tray(self);
 }
@@ -180,6 +245,7 @@ static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->shutdown_channel);
+  g_clear_object(&self->tray_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
@@ -194,6 +260,7 @@ static void my_application_class_init(MyApplicationClass* klass) {
 
 static void my_application_init(MyApplication* self) {
   self->shutdown_channel = nullptr;
+  self->tray_channel = nullptr;
 }
 
 MyApplication* my_application_new() {

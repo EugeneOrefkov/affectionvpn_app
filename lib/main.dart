@@ -11,6 +11,7 @@ import 'core/utils/messenger.dart';
 import 'core/window/app_window.dart';
 import 'screens/splash_screen.dart';
 import 'services/linux_vless_platform.dart';
+import 'services/tray_bridge.dart';
 import 'state/app_state.dart';
 
 Future<void> main() async {
@@ -32,8 +33,34 @@ void _registerTrayShutdownBridge() {
   });
 }
 
-class AffectionVpnApp extends StatelessWidget {
+class AffectionVpnApp extends StatefulWidget {
   const AffectionVpnApp({super.key});
+
+  @override
+  State<AffectionVpnApp> createState() => _AffectionVpnAppState();
+}
+
+class _AffectionVpnAppState extends State<AffectionVpnApp> {
+  @override
+  void initState() {
+    super.initState();
+    if (Platform.isLinux) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final state = context.read<AppState>();
+        TrayBridge.instance.onModeChanged = (mode) {
+          state.setProxyOnly(mode == 'proxy');
+        };
+        TrayBridge.instance.setMode(
+          state.proxyOnly ? 'proxy' : 'tun',
+        );
+        state.addListener(() {
+          TrayBridge.instance.setMode(
+            state.proxyOnly ? 'proxy' : 'tun',
+          );
+        });
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
