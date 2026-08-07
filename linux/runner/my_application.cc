@@ -124,27 +124,24 @@ static void window_method_call_handler(FlMethodChannel* channel,
   fl_method_call_respond_not_implemented(method_call, nullptr);
 }
 
-// Fires inside GDK event processing (after Flutter's own handler), so the
-// Wayland event serial from the current button press is still valid. When
-// the compositor receives xdg_toplevel_move with that serial it accepts the
-// move request — the alternating failure pattern (works every other click)
-// disappears because we no longer rely on a last_button_serial that gets
-// overwritten by release events.
-static gboolean on_view_event(GtkWidget* widget, GdkEvent* event, gpointer user_data) {
+// GDK-level event filter. Fires before any GtkWidget processing, so the
+// Wayland event serial is still valid and Flutter never sees the event
+// (avoids consuming a GtkWidget signal that Flutter already claimed).
+static GdkFilterReturn on_gdk_filter(GdkXEvent* xevent, GdkEvent* event,
+                                     gpointer user_data) {
   if (event->type == GDK_BUTTON_PRESS) {
     GdkEventButton* bev = (GdkEventButton*)event;
-    // Only the top 36 px is the custom title bar.
     if (bev->y >= 0 && bev->y <= 36) {
-      // The button cluster sits in the rightmost ~80 px; skip it.
-      gint w = gtk_widget_get_allocated_width(widget);
+      GtkWindow* win = GTK_WINDOW(user_data);
+      GdkWindow* gdk_win = gtk_widget_get_window(GTK_WIDGET(win));
+      gint w = gdk_window_get_width(gdk_win);
       if (bev->x < w - 80) {
-        GtkWindow* win = GTK_WINDOW(user_data);
         gtk_window_begin_move_drag(win, bev->button, bev->x_root, bev->y_root, bev->time);
-        return TRUE;
+        return GDK_FILTER_REMOVE;
       }
     }
   }
-  return FALSE;
+  return GDK_FILTER_CONTINUE;
 }
 
 // Implements GApplication::activate.
@@ -209,8 +206,9 @@ static void my_application_activate(GApplication* application) {
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
 
-  // Fires after Flutter's own event handler, preserving the Wayland serial.
-  g_signal_connect_after(view, "event", G_CALLBACK(on_view_event), window);
+  // GDK-level filter intercepts button-press events before Flutter sees them.
+  GdkWindow* gdk_win = gtk_widget_get_window(GTK_WIDGET(window));
+  gdk_window_add_filter(gdk_win, on_gdk_filter, window);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
