@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 const double _kWindowTitleBarHeight = 38;
-const double _kWindowResizeEdge = 8;
 
 /// Initializes the desktop window (currently Linux) using window_manager.
 ///
@@ -29,7 +28,7 @@ Future<void> initializeAppWindow() async {
   });
 }
 
-/// Wraps the app content with a custom title bar on Linux.
+/// Wraps the app content with resize handles and a custom title bar on Linux.
 class WindowFrame extends StatelessWidget {
   const WindowFrame({super.key, required this.child});
 
@@ -39,11 +38,13 @@ class WindowFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!Platform.isLinux) return child;
 
-    return Column(
-      children: [
-        const WindowTitleBar(),
-        Expanded(child: child),
-      ],
+    return DragToResizeArea(
+      child: Column(
+        children: [
+          const WindowTitleBar(),
+          Expanded(child: child),
+        ],
+      ),
     );
   }
 }
@@ -110,10 +111,10 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
         color: colorScheme.surface,
         child: Stack(
           children: [
-            // Draggable area. Inset from the top edge so the resize strip
-            // above can still grab the window border.
+            // Draggable area. The DragToResizeArea above handles resize
+            // edges, so only a drag region is needed here.
             Positioned(
-              top: _kWindowResizeEdge,
+              top: 0,
               left: 0,
               right: 0,
               bottom: 0,
@@ -121,21 +122,6 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
                 behavior: HitTestBehavior.translucent,
                 onPanStart: (_) => windowManager.startDragging(),
                 onDoubleTap: _toggleMaximize,
-              ),
-            ),
-            // Top resize strip.
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: _kWindowResizeEdge,
-              child: MouseRegion(
-                cursor: SystemMouseCursors.resizeUpDown,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onPanStart: (_) =>
-                      windowManager.startResizing(ResizeEdge.top),
-                ),
               ),
             ),
             // Visible content.
