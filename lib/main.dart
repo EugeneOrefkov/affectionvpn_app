@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_vless_platform_interface/flutter_vless_platform_interface.dart';
 import 'package:provider/provider.dart';
 
@@ -10,27 +9,17 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/messenger.dart';
 import 'core/window/app_window.dart';
 import 'screens/splash_screen.dart';
+import 'services/linux_tray.dart';
 import 'services/linux_vless_platform.dart';
-import 'services/tray_bridge.dart';
 import 'state/app_state.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-    if (Platform.isLinux) {
-      VlessPlatform.instance = LinuxVlessPlatform();
-      _registerTrayShutdownBridge();
-      await initializeAppWindow();
-    }
+  if (Platform.isLinux) {
+    VlessPlatform.instance = LinuxVlessPlatform();
+    await initializeAppWindow();
+  }
   runApp(const AffectionVpnApp());
-}
-
-void _registerTrayShutdownBridge() {
-  const channel = MethodChannel('dev.affection.affection_vpn/shutdown');
-  channel.setMethodCallHandler((call) async {
-    if (call.method == 'quit') {
-      await AppState.instance?.shutdown();
-    }
-  });
 }
 
 class AffectionVpnApp extends StatefulWidget {
@@ -47,17 +36,7 @@ class _AffectionVpnAppState extends State<AffectionVpnApp> {
     if (Platform.isLinux) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final state = context.read<AppState>();
-        TrayBridge.instance.onModeChanged = (mode) {
-          state.setProxyOnly(mode == 'proxy');
-        };
-        TrayBridge.instance.setMode(
-          state.proxyOnly ? 'proxy' : 'tun',
-        );
-        state.addListener(() {
-          TrayBridge.instance.setMode(
-            state.proxyOnly ? 'proxy' : 'tun',
-          );
-        });
+        LinuxTray.instance.init(state);
       });
     }
   }
