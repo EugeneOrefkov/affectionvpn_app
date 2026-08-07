@@ -38,6 +38,16 @@ class _RequestLogScreenState extends State<RequestLogScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                   child: Row(
                     children: [
+                      IconButton(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        tooltip: 'Назад',
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          color: AppColors.textPrimary,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
                       const Text(
                         'Журнал запросов',
                         style: TextStyle(

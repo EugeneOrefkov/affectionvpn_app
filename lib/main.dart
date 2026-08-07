@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_vless_platform_interface/flutter_vless_platform_interface.dart';
 import 'package:provider/provider.dart';
 
@@ -14,8 +15,21 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isLinux) {
     VlessPlatform.instance = LinuxVlessPlatform();
+    _registerTrayShutdownBridge();
   }
   runApp(const AffectionVpnApp());
+}
+
+/// The native system-tray "Выход" item asks Dart to tear the tunnel down
+/// before the process exits, so the xray core and the system proxy do not
+/// linger after quit.
+void _registerTrayShutdownBridge() {
+  const channel = MethodChannel('dev.affection.affection_vpn/shutdown');
+  channel.setMethodCallHandler((call) async {
+    if (call.method == 'quit') {
+      await AppState.instance?.shutdown();
+    }
+  });
 }
 
 class AffectionVpnApp extends StatelessWidget {

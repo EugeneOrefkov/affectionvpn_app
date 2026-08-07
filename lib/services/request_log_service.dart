@@ -207,45 +207,63 @@ class RequestLogService extends ChangeNotifier {
   /// Parses one line of the Xray access log, e.g.
   ///
   /// ```
-  /// 2026/08/06 12:34:56.123 [Info] [Access] tcp:example.com:443 accepted tcp:127.0.0.1:53210 [socks-app -> proxy]
+  /// 2026/08/07 08:46:15.370176 from 127.0.0.1:37148 accepted http://example.com/ [http >> direct]
+  /// 2026/08/07 08:46:15.451468 from 127.0.0.1:37150 accepted //example.com:443 [http >> direct]
   /// ```
   ///
-  /// Returns null for lines that do not describe an accepted/rejected
-  /// connection with an inbound -> outbound path (e.g. `connection from ...`).
+  /// The core always renders lines as
+  /// `from <client> <accepted|rejected> <target> [inbound >> outbound]`,
+  /// optionally followed by a `reason:`/`email:` tail. The `<target>` is the
+  /// sniffed host (an `http(s)://` URL, a bare `//host:port` CONNECT, or a
+  /// `tcp:`/`udp:` destination). Returns null for anything else.
   @visibleForTesting
   static RequestLogEntry? parseAccessLine(String line) {
-    final header = _accessHeader.firstMatch(line);
-    if (header == null) {
+    final match = _accessLine.firstMatch(line);
+    if (match == null) {
       return null;
     }
-    final time = _parseTime(header.group(1) ?? '');
-    final message = header.group(2) ?? '';
-    final body = _accessBody.firstMatch(message);
-    if (body == null) {
-      return null;
-    }
-    final target = body.group(1) ?? '';
-    final action = body.group(2) ?? '';
-    final via = body.group(3) ?? '';
+    final time = _parseTime(match.group(1) ?? '');
+    final action = match.group(2) ?? '';
+    final target = match.group(3) ?? '';
+    final via = match.group(4) ?? '';
     return RequestLogEntry(
       time: time,
       kind: RequestLogKind.tunnel,
-      target: _hostOf(target),
+      target: _normalizeTarget(target),
       via: via,
       status: action,
     );
   }
 
-  static final _accessHeader = RegExp(
-    r'^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+\[Info\]\s+\[Access\]\s+(.*)$',
+  static final _accessLine = RegExp(
+    r'^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+\S+\s+'
+    r'(accepted|rejected)\s+(.+?)(?:\s+\[([^\]]+)\])?(?:\s+.+)?$',
   );
 
-  /// `tcp:<target>:<port> accepted <local> [inbound -> outbound]`. The target
-  /// host may be a sniffed domain or an IPv6 literal in brackets, so the host
-  /// group is greedy up to the final port.
-  static final _accessBody = RegExp(
-    r'^(?:udp|tcp):(.+):\d+\s+(accepted|rejected)\s+.*?\[([^\]]+)\]$',
-  );
+  /// Extracts a displayable host[:port] from the raw `<target>` segment:
+  /// strips an `http(s)://` scheme, a leading `//` (CONNECT), a `tcp:`/`udp:`
+  /// prefix, and any URL path.
+  static String _normalizeTarget(String raw) {
+    var target = raw.trim();
+    final scheme = _targetScheme.firstMatch(target);
+    if (scheme != null) {
+      target = target.substring(scheme.end);
+    } else if (target.startsWith('//')) {
+      target = target.substring(2);
+    } else {
+      target = target.replaceFirst(_targetProtocol, '');
+    }
+    final slash = target.indexOf('/');
+    if (slash >= 0) {
+      target = target.substring(0, slash);
+    }
+    return _hostOf(target);
+  }
+
+  static final _targetScheme =
+      RegExp(r'^(?:https?|tcp|udp|tls|kcp|quic|ws|wss)://');
+
+  static final _targetProtocol = RegExp(r'^(?:tcp|udp):');
 
   static String _hostOf(String target) {
     if (target.startsWith('[')) {

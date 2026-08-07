@@ -42,4 +42,40 @@ void main() {
     final auth = inbounds.lastWhere((e) => e['tag'] == 'socks-auth');
     expect(auth['port'], 10811);
   });
+
+  test('buildAuthProxyConfig points the core access log for the request log', () {
+    const baseConfig = '{"inbounds":[],"outbounds":[]}';
+
+    final result =
+        VpnService.instance.buildAuthProxyConfig(baseConfig, 'u', 'p');
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final log = map['log'] as Map<String, dynamic>;
+    expect(log['access'], isNotEmpty);
+    expect(log['loglevel'], 'info');
+  });
+
+  test('buildInternalSocksConfig points the core access log for the request log',
+      () {
+    const baseConfig = '{"inbounds":[],"outbounds":[]}';
+
+    final result = VpnService.instance.buildInternalSocksConfig(baseConfig);
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final log = map['log'] as Map<String, dynamic>;
+    expect(log['access'], isNotEmpty);
+    expect(log['loglevel'], 'info');
+  });
+
+  test('buildInternalSocksConfig overrides a none loglevel config', () {
+    const baseConfig =
+        '{"log":{"access":"","loglevel":"none"},"inbounds":[],"outbounds":[]}';
+
+    final result = VpnService.instance.buildInternalSocksConfig(baseConfig);
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final log = map['log'] as Map<String, dynamic>;
+    expect(log['access'], isNotEmpty);
+    expect(log['loglevel'], 'info');
+  });
 }

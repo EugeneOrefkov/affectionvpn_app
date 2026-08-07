@@ -101,7 +101,23 @@ class VpnService {
       'settings': {'auth': 'noauth', 'udp': true},
     });
     map['inbounds'] = inbounds;
-    return jsonEncode(map);
+    return jsonEncode(_ensureAccessLog(map));
+  }
+
+  /// Points `log.access` at the core's access log so [RequestLogService] can
+  /// tail tunnel connections. On Android the vendored plugin rewrites the path
+  /// to `<files>/access.log`; on Linux [LinuxVlessPlatform.prepareRuntime]
+  /// overrides it with the absolute app-support path. `loglevel` is forced to
+  /// `info`, since `none` would silently disable the access log.
+  Map<String, dynamic> _ensureAccessLog(Map<String, dynamic> map) {
+    final log = map['log'];
+    if (log is Map) {
+      log['access'] = 'access.log';
+      log['loglevel'] = 'info';
+    } else {
+      map['log'] = {'access': 'access.log', 'loglevel': 'info'};
+    }
+    return map;
   }
 
   Future<int?> measureServerDelay(
@@ -163,7 +179,7 @@ class VpnService {
       },
     });
     map['inbounds'] = inbounds;
-    return jsonEncode(map);
+    return jsonEncode(_ensureAccessLog(map));
   }
 
   Future<int?> measureTcpDelay(String address, int port) async {

@@ -24,7 +24,11 @@ import '../core/utils/messenger.dart';
 enum ConnectionStatus { disconnected, connecting, connected, disconnecting }
 
 class AppState extends ChangeNotifier {
+  /// The currently live state. The native Linux tray "Выход" item reaches the
+  /// app through this to stop the tunnel before the process exits.
+  static AppState? instance;
   AppState() {
+    instance = this;
     VpnService.instance.create(
       onStatusChanged: _onStatusChanged,
     );
@@ -580,6 +584,10 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Stops the tunnel and background work before the app process exits.
+  /// Invoked from the native Linux tray "Выход" item via the shutdown bridge.
+  Future<void> shutdown() => _stopIfNeeded();
+
   void _onStatusChanged(VlessStatus status) {
     _status = status;
     switch (status.connectionState) {
@@ -766,6 +774,9 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (instance == this) {
+      instance = null;
+    }
     _connectivitySub?.cancel();
     _updateCheckTimer?.cancel();
     _subscriptionRefreshTimer?.cancel();

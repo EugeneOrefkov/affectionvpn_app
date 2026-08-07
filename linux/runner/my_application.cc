@@ -1,9 +1,7 @@
 #include "my_application.h"
 
+#include <libayatana-appindicator/app-indicator.h>
 #include <flutter_linux/flutter_linux.h>
-#ifdef GDK_WINDOWING_X11
-#include <gdk/gdkx.h>
-#endif
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -12,6 +10,10 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
   GtkWindow* window;
   FlMethodChannel* window_channel;
+  FlMethodChannel* shutdown_channel;
+  AppIndicator* tray_indicator;
+  GtkWidget* tray_menu;
+  GtkWidget* tray_open_item;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -26,6 +28,78 @@ static gboolean on_window_delete(GtkWidget* widget, GdkEvent* event,
                                  gpointer user_data) {
   gtk_widget_hide_on_delete(widget);
   return TRUE;
+}
+
+// Bring the (possibly hidden) window back to the foreground.
+static void present_window(gpointer user_data) {
+  GtkWindow* window = GTK_WINDOW(user_data);
+  gtk_window_present(window);
+}
+
+// Tray "Выход": let Dart tear the tunnel down first, then quit the process.
+static void on_vpn_stopped_before_quit(GObject* source_object,
+                                       GAsyncResult* result,
+                                       gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(FlMethodResponse) response =
+      fl_method_channel_invoke_method_finish(FL_METHOD_CHANNEL(source_object),
+                                             result, &error);
+  if (error != nullptr) {
+    g_warning("Failed to stop VPN before quit: %s", error->message);
+  }
+  g_application_quit(G_APPLICATION(self));
+}
+
+static void quit_from_tray(gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  fl_method_channel_invoke_method(self->shutdown_channel, "quit", nullptr,
+                                  nullptr, on_vpn_stopped_before_quit, self);
+}
+
+static void ensure_tray_menu(MyApplication* self) {
+  if (self->tray_menu != nullptr) {
+    return;
+  }
+  self->tray_menu = gtk_menu_new();
+
+  self->tray_open_item = gtk_menu_item_new_with_label("Открыть");
+  g_signal_connect_swapped(self->tray_open_item, "activate",
+                           G_CALLBACK(present_window), self->window);
+  gtk_menu_shell_append(GTK_MENU_SHELL(self->tray_menu),
+                        self->tray_open_item);
+
+  GtkWidget* quit_item = gtk_menu_item_new_with_label("Выход");
+  g_signal_connect_swapped(quit_item, "activate", G_CALLBACK(quit_from_tray),
+                           self);
+  gtk_menu_shell_append(GTK_MENU_SHELL(self->tray_menu), quit_item);
+}
+
+// Creates the tray icon once. It lives for the whole process, so the user can
+// reopen the window (or quit) after the window has been hidden to the tray.
+// Uses the StatusNotifierItem protocol via libayatana-appindicator, which
+// modern desktops (KDE Plasma, GNOME with the AppIndicator extension) render
+// natively — the deprecated GtkStatusIcon/XEmbed path no longer shows on them.
+static void setup_tray(MyApplication* self) {
+  if (self->tray_indicator != nullptr) {
+    return;
+  }
+  ensure_tray_menu(self);
+  // app_indicator_new is the last remaining ABI-stable constructor; the whole
+  // ayatana-appindicator3 API is deprecated upstream, so silence the warning
+  // that -Wall -Werror would otherwise promote to an error.
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+  self->tray_indicator =
+      app_indicator_new(APPLICATION_ID, "affection-vpn",
+                        APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
+  G_GNUC_END_IGNORE_DEPRECATIONS
+  app_indicator_set_title(self->tray_indicator, "Affection VPN");
+  // Bind the primary (left-click / "activate") action to the "Открыть" menu
+  // item so the tray icon restores the hidden window on a single click.
+  app_indicator_set_secondary_activate_target(self->tray_indicator,
+                                              self->tray_open_item);
+  app_indicator_set_menu(self->tray_indicator, GTK_MENU(self->tray_menu));
+  app_indicator_set_status(self->tray_indicator, APP_INDICATOR_STATUS_ACTIVE);
 }
 
 // Handle window-control calls coming from the Flutter side ("dragWindow",
@@ -102,10 +176,13 @@ static void my_application_activate(GApplication* application) {
   self->window = window;
   g_signal_connect(window, "delete-event", G_CALLBACK(on_window_delete), nullptr);
 
-  // Set up the MethodChannel bridge for the custom Flutter title bar.
-  g_autoptr(FlEngine) engine = fl_view_get_engine(view);
-  g_autoptr(FlBinaryMessenger) messenger =
-      fl_engine_get_binary_messenger(engine);
+  // Set up the MethodChannel bridge for the custom Flutter title bar. The
+  // engine and its messenger are owned by the view — borrow them only. Using
+  // g_autoptr here would g_object_unref them at the end of activate(), which
+  // disposes the engine and stops Flutter from ever presenting its first
+  // frame (the window stays hidden).
+  FlEngine* engine = fl_view_get_engine(view);
+  FlBinaryMessenger* messenger = fl_engine_get_binary_messenger(engine);
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   self->window_channel = fl_method_channel_new(
       messenger, "dev.affection.affection_vpn/window",
@@ -113,6 +190,14 @@ static void my_application_activate(GApplication* application) {
   fl_method_channel_set_method_call_handler(
       self->window_channel, window_method_call_handler, g_object_ref(window),
       g_object_unref);
+
+  // Native -> Dart channel so the tray's "Выход" can stop the tunnel before
+  // the process exits (avoids orphaning the xray core and its system proxy).
+  self->shutdown_channel = fl_method_channel_new(
+      messenger, "dev.affection.affection_vpn/shutdown",
+      FL_METHOD_CODEC(codec));
+
+  setup_tray(self);
 }
 
 // Implements GApplication::local_command_line.
@@ -130,7 +215,12 @@ static gboolean my_application_local_command_line(GApplication* application,
     return TRUE;
   }
 
-  g_application_activate(application);
+  // Single-instance app: a second launch is handed to the primary instance
+  // (its "activate" handler presents the hidden window), so only the primary
+  // creates its own window here.
+  if (!g_application_get_is_remote(application)) {
+    g_application_activate(application);
+  }
   *exit_status = 0;
 
   return TRUE;
@@ -160,6 +250,9 @@ static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->window_channel);
+  g_clear_object(&self->shutdown_channel);
+  g_clear_object(&self->tray_indicator);
+  g_clear_object(&self->tray_menu);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
@@ -174,6 +267,10 @@ static void my_application_class_init(MyApplicationClass* klass) {
 
 static void my_application_init(MyApplication* self) {
   self->window_channel = nullptr;
+  self->shutdown_channel = nullptr;
+  self->tray_indicator = nullptr;
+  self->tray_menu = nullptr;
+  self->tray_open_item = nullptr;
 }
 
 MyApplication* my_application_new() {
@@ -185,5 +282,5 @@ MyApplication* my_application_new() {
 
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+                                     G_APPLICATION_DEFAULT_FLAGS, nullptr));
 }
