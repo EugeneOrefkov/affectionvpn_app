@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 import '../utils/linux_window_bridge.dart';
@@ -33,64 +32,58 @@ class LinuxTitleBar extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: MouseRegion(
-                cursor: SystemMouseCursors.move,
-                child: SizedBox(
-                  height: height,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: showBrand
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Image.asset(
-                                  'assets/app_icon.png',
-                                  width: 22,
-                                  height: 22,
-                                  fit: BoxFit.cover,
+              child: GestureDetector(
+                onPanStart: (_) => LinuxWindowBridge.startDrag(),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.move,
+                  child: SizedBox(
+                    height: height,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: showBrand
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.asset(
+                                    'assets/app_icon.png',
+                                    width: 22,
+                                    height: 22,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Affection VPN',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Affection VPN',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.2,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          )
-                        : const SizedBox.shrink(),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
+                    ),
                   ),
                 ),
               ),
             ),
             _WindowButton(
               icon: Icons.remove,
-              onPressed: _minimize,
+              onPressed: LinuxWindowBridge.minimize,
             ),
             _WindowButton(
               icon: Icons.close,
-              onPressed: () => LinuxWindowBridge.close(),
+              onPressed: LinuxWindowBridge.close,
             ),
             const SizedBox(width: 4),
           ],
         ),
       ),
     );
-  }
-
-  static void _minimize() {
-    if (!Platform.isLinux) {
-      return;
-    }
-    const channel = MethodChannel('dev.affection.affection_vpn/window');
-    channel.invokeMethod<void>('minimizeWindow').catchError((_) {
-    });
   }
 }
 
