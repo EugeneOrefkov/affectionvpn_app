@@ -148,37 +148,6 @@ static void my_application_activate(GApplication* application) {
   // default OS frame.
   gtk_window_set_decorated(window, FALSE);
 
-  // On Wayland gtk_window_set_decorated(FALSE) is ignored by the compositor
-  // unless GTK3 is in CSD (client-side decorations) mode. Forcing CSD with a
-  // zero-height, invisible header bar tells KDE KWin (and other Wayland
-  // compositors) not to draw a server-side title bar. The visible UI is still
-  // the Flutter custom title bar below.
-  GtkWidget* header_bar = gtk_header_bar_new();
-  gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header_bar), FALSE);
-  gtk_widget_set_visible(header_bar, FALSE);
-  gtk_widget_set_no_show_all(header_bar, TRUE);
-  gtk_widget_set_size_request(header_bar, -1, 0);
-
-  GtkCssProvider* header_css_provider = gtk_css_provider_new();
-  gtk_css_provider_load_from_data(
-      header_css_provider,
-      "headerbar, .titlebar, .default-decoration { "
-      "  min-height: 0px; "
-      "  padding: 0; "
-      "  margin: 0; "
-      "  border: none; "
-      "  background: transparent; "
-      "}",
-      -1, nullptr);
-  GtkStyleContext* header_style = gtk_widget_get_style_context(header_bar);
-  gtk_style_context_add_provider(header_style,
-                                 GTK_STYLE_PROVIDER(header_css_provider),
-                                 GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-  gtk_style_context_add_class(header_style, "titlebar");
-  g_object_unref(header_css_provider);
-
-  gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-
   gtk_window_set_default_size(window, 1280, 720);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

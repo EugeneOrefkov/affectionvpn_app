@@ -6,15 +6,6 @@ import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 import '../utils/linux_window_bridge.dart';
 
-/// Custom sliver of the OS window. Used instead of the GTK title bar so the
-/// branding matches the in-app home page top-left rather than a bulky system
-/// header. On non-Linux platforms it falls back to an empty box (Android
-/// already shows its own status bar, etc.).
-///
-/// Drag area: left/center strip fires [LinuxWindowBridge.drag] on pointer
-/// down, which hands off to `gtk_window_begin_move_drag` natively.
-/// Right cluster: minimize + close buttons, both wired through the same
-/// MethodChannel bridge.
 class LinuxTitleBar extends StatelessWidget {
   const LinuxTitleBar({
     super.key,
@@ -27,60 +18,54 @@ class LinuxTitleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Skip on every non-Linux target so Android/iOS/Windows live render
-    // unchanged (they have their own decorations or status bar handled by
-    // SafeArea).
     if (!Platform.isLinux) {
       return const SizedBox.shrink();
     }
     return SizedBox(
       height: height,
       child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          border: const Border(
+        decoration: const BoxDecoration(
+          border: Border(
             bottom: BorderSide(color: AppColors.borderSoft, width: 0.5),
           ),
         ),
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onPanStart: (_) => LinuxWindowBridge.drag(),
-          child: Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: height,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: showBrand
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Image.asset(
-                                  'assets/app_icon.png',
-                                  width: 22,
-                                  height: 22,
-                                  fit: BoxFit.cover,
-                                ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (_) => LinuxWindowBridge.drag(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: showBrand
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Image.asset(
+                                'assets/app_icon.png',
+                                width: 22,
+                                height: 22,
+                                fit: BoxFit.cover,
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Affection VPN',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
-                                ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Affection VPN',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
                               ),
-                            ],
-                          )
-                        : const SizedBox.shrink(),
-                  ),
+                            ),
+                          ],
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
+            ),
             _WindowButton(
               icon: Icons.remove,
               onPressed: _minimize,
@@ -93,8 +78,7 @@ class LinuxTitleBar extends StatelessWidget {
           ],
         ),
       ),
-      ),
-      );
+    );
   }
 
   static void _minimize() {
@@ -103,8 +87,6 @@ class LinuxTitleBar extends StatelessWidget {
     }
     const channel = MethodChannel('dev.affection.affection_vpn/window');
     channel.invokeMethod<void>('minimizeWindow').catchError((_) {
-      // Optional; ignored if the native side does not implement it (older
-      // builds kept before the channel was extended).
     });
   }
 }
