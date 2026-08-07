@@ -209,9 +209,10 @@ static void my_application_activate(GApplication* application) {
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
 
-  // Intercept button events in the title bar area for native window drag
-  // (avoids the Wayland serial problem of an async MethodChannel roundtrip).
-  g_signal_connect(view, "button-press-event",
+  // Intercept button events in the title bar area for native window drag.
+  // Connecting at window level ensures the event is caught before Flutter
+  // consumes it (FlView swallows button-press-event in its own handler).
+  g_signal_connect(window, "button-press-event",
                    G_CALLBACK(on_view_button_press), window);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
