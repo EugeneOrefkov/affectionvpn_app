@@ -472,3 +472,35 @@ jobs:
             -o /tmp/latest-upload.json
           python3 -c "import json; d=json.load(open('/tmp/latest-upload.json')); assert d.get('name')=='latest.json', d"
           echo "updated latest.json with Linux assets"
+
+      - name: Update Arch Linux PKGBUILD
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          V="${VERSION#v}"
+          TARBALL="/tmp/affection-vpn-$V-linux-x64.tar.gz"
+          SHA256=$(sha256sum "$TARBALL" | cut -d' ' -f1)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          sed -i "s/^pkgver=.*/pkgver=$V/" packaging/arch/PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" packaging/arch/PKGBUILD
+          python3 -c "
+import re, sys
+sha256 = sys.argv[1]
+with open('packaging/arch/PKGBUILD') as f:
+    s = f.read()
+s = re.sub(r\"(sha256sums=\\(\\n\\s*')[^']*('\\n)\", r\"\\g<1>\" + sha256 + r\"\\g<2>\", s, count=1)
+with open('packaging/arch/PKGBUILD', 'w') as f:
+    f.write(s)
+" "$SHA256"
+
+          git add packaging/arch/PKGBUILD
+          if git diff --cached --quiet; then
+            echo 'PKGBUILD already up to date'
+          else
+            git commit -m "update arch PKGBUILD to v$V"
+            git push origin HEAD:main
+          fi
