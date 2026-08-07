@@ -53,7 +53,9 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
-# Tray support is handled by the tray_manager Flutter plugin.
+# StatusNotifierItem (AppIndicator) tray support, e.g. libayatana-appindicator.
+pkg_check_modules(AYATANA_APPINDICATOR REQUIRED IMPORTED_TARGET
+  ayatana-appindicator3-0.1)
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
