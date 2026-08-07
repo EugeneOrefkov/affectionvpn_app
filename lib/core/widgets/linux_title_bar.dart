@@ -42,52 +42,45 @@ class LinuxTitleBar extends StatelessWidget {
             bottom: BorderSide(color: AppColors.borderSoft, width: 0.5),
           ),
         ),
-        child: Row(
-          children: [
-            Expanded(
-              // Drag handle: native begin_move_drag on the *first* pointer
-              // down so the WM performs the actual move (correct aero-snap,
-              // correct edge resistance). The Listener ignores children so
-              // the underlying padding area keeps working as a drag region
-              // even when the brand text takes the full width on narrow
-              // windows.
-              child: Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: (_) => LinuxWindowBridge.drag(),
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onPanStart: (_) => LinuxWindowBridge.drag(),
+          child: Row(
+            children: [
+              Expanded(
                 child: SizedBox(
                   height: height,
                   child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: showBrand
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Image.asset(
-                                'assets/app_icon.png',
-                                width: 22,
-                                height: 22,
-                                fit: BoxFit.cover,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: showBrand
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Image.asset(
+                                  'assets/app_icon.png',
+                                  width: 22,
+                                  height: 22,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Affection VPN',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.2,
+                              const SizedBox(width: 8),
+                              Text(
+                                'Affection VPN',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                ),
                               ),
-                            ),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ),
               ),
-            ),
             _WindowButton(
               icon: Icons.remove,
               onPressed: _minimize,
@@ -99,6 +92,7 @@ class LinuxTitleBar extends StatelessWidget {
             const SizedBox(width: 4),
           ],
         ),
+      ),
       ),
       );
   }
