@@ -54,8 +54,14 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 # StatusNotifierItem (AppIndicator) tray support, e.g. libayatana-appindicator.
-pkg_check_modules(AYATANA_APPINDICATOR REQUIRED IMPORTED_TARGET
+# The pkg-config module name differs between distros: Arch Linux ships
+# ayatana-appindicator3-0.1 while Debian/Ubuntu ship libayatana-appindicator3-0.1.
+pkg_check_modules(AYATANA_APPINDICATOR QUIET IMPORTED_TARGET
   ayatana-appindicator3-0.1)
+if(NOT AYATANA_APPINDICATOR_FOUND)
+  pkg_check_modules(AYATANA_APPINDICATOR REQUIRED IMPORTED_TARGET
+    libayatana-appindicator3-0.1)
+endif()
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
