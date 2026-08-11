@@ -10,6 +10,7 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/messenger.dart';
 import 'core/window/app_window.dart';
 import 'screens/splash_screen.dart';
+import 'services/linux_tray.dart';
 import 'services/linux_vless_platform.dart';
 import 'state/app_state.dart';
 
@@ -32,8 +33,25 @@ void _registerTrayShutdownBridge() {
   });
 }
 
-class AffectionVpnApp extends StatelessWidget {
+class AffectionVpnApp extends StatefulWidget {
   const AffectionVpnApp({super.key});
+
+  @override
+  State<AffectionVpnApp> createState() => _AffectionVpnAppState();
+}
+
+class _AffectionVpnAppState extends State<AffectionVpnApp> {
+  @override
+  void initState() {
+    super.initState();
+    if (Platform.isLinux) {
+      // After the first frame the ChangeNotifierProvider already owns an
+      // AppState, which the tray needs to react to native menu actions.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        LinuxTray.instance.init(context.read<AppState>());
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +63,8 @@ class AffectionVpnApp extends StatelessWidget {
         scaffoldMessengerKey: scaffoldMessengerKey,
         theme: AppTheme.dark(),
         home: const SplashScreen(),
-        builder: (context, child) => WindowFrame(child: child ?? const SizedBox.shrink()),
+        builder: (context, child) =>
+            WindowFrame(child: child ?? const SizedBox.shrink()),
       ),
     );
   }

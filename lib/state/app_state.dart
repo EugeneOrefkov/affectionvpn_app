@@ -20,6 +20,7 @@ import '../services/tunnel_http.dart';
 import '../services/update_service.dart';
 import '../services/vpn_service.dart';
 import '../core/utils/messenger.dart';
+import '../services/linux_tray.dart';
 
 enum ConnectionStatus { disconnected, connecting, connected, disconnecting }
 
@@ -793,6 +794,17 @@ class AppState extends ChangeNotifier {
     _downloadedApkPath = null;
     _downloadProgress = null;
     notifyListeners();
+  }
+
+  /// Keeps the native Linux tray in sync. Every state change the tray displays
+  /// (connection status, selected server, server list) flows through
+  /// [ChangeNotifier.notifyListeners], so this single hook is enough.
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    if (Platform.isLinux) {
+      LinuxTray.instance.push(this);
+    }
   }
 
   @override
