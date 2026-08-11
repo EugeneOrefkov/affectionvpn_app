@@ -65,6 +65,10 @@ jobs:
         with:
           tag_name: experimental-core-v${{ steps.version.outputs.version }}
           name: Experimental core v${{ steps.version.outputs.version }}
+          # Prerelease so this release never takes the "Latest" badge: the
+          # app's update check reads releases/latest/download/latest.json,
+          # which must keep pointing at the app releases.
+          prerelease: true
           body: |
             libxray.so built from XTLS/Xray-core v${{ steps.version.outputs.version }} sources.
 
