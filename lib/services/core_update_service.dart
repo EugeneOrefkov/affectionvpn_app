@@ -11,8 +11,9 @@ import '../core/utils/device_abi.dart';
 ///
 /// The stable core is bundled in the APK (flutter_vless AAR from Maven
 /// Central). Experimental cores are compiled from XTLS/Xray-core by
-/// scripts/build_xray_experimental.sh, uploaded to the
-/// `experimental-core-v<version>` release of this repo, and downloaded here.
+/// scripts/build_xray_experimental.sh and published to the
+/// `experimental-core` branch of this repo, from where they are downloaded
+/// via raw.githubusercontent.com (no GitHub release involved).
 class CoreUpdateService {
   CoreUpdateService._();
   static final CoreUpdateService instance = CoreUpdateService._();
@@ -75,8 +76,8 @@ class CoreUpdateService {
     }
 
     final url = Uri.parse(
-      'https://github.com/${AppConfig.githubOwner}/${AppConfig.githubRepo}/'
-      'releases/download/experimental-core-v$version/'
+      'https://raw.githubusercontent.com/${AppConfig.githubOwner}/'
+      '${AppConfig.githubRepo}/experimental-core/'
       'libxray-$abi-$version.so',
     );
 

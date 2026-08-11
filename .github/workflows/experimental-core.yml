@@ -53,25 +53,26 @@ jobs:
           test -n "$V" || { echo "::error::no built artifacts found"; exit 1; }
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
-      - name: Delete existing experimental-core release (if any)
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Publish to experimental-core branch
         run: |
-          TAG="experimental-core-v${{ steps.version.outputs.version }}"
-          gh release delete "$TAG" --yes --cleanup-tag || true
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          V="${{ steps.version.outputs.version }}"
 
-      - name: Publish experimental-core release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: experimental-core-v${{ steps.version.outputs.version }}
-          name: Experimental core v${{ steps.version.outputs.version }}
-          # Prerelease so this release never takes the "Latest" badge: the
-          # app's update check reads releases/latest/download/latest.json,
-          # which must keep pointing at the app releases.
-          prerelease: true
-          body: |
-            libxray.so built from XTLS/Xray-core v${{ steps.version.outputs.version }} sources.
+          git fetch origin experimental-core || true
+          if git rev-parse -q --verify origin/experimental-core; then
+            git checkout -B experimental-core origin/experimental-core
+          else
+            git checkout --orphan experimental-core
+            git rm -rf --quiet . || true
+          fi
 
-            Install it via the app's experimental core panel: Settings → tap the
-            core row five times → Install experimental core.
-          files: build/experimental/libxray-*.so
+          # The built .so files (build/ is gitignored, so they survive the
+          # branch switch) are copied to the branch root. Older versions stay
+          # in place, so any previously built version stays downloadable.
+          cp build/experimental/libxray-*.so .
+          git add libxray-*.so
+          git commit -m "experimental core v$V" || echo "no changes to commit"
+          git push origin experimental-core
+          echo "Published: https://github.com/$GITHUB_REPOSITORY/tree/experimental-core"
