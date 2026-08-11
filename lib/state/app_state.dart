@@ -59,16 +59,6 @@ class AppState extends ChangeNotifier {
   int? _measuringIndex;
   bool _initialized = false;
 
-  static const _autoSelectInterval = Duration(seconds: 60);
-
-  /// If the connected server's HTTP GET ping stays below this, assume it is
-  /// healthy and skip the expensive full rescan.
-  static const _healthyDelayMs = 500;
-
-  /// Only switch to the fastest server when it is at least this much faster
-  /// than the current one, so the connection does not jump around.
-  static const _switchDiffMs = 1000;
-
   UpdateInfo? _availableUpdate;
   bool _isCheckingUpdate = false;
   bool _isDownloadingUpdate = false;
@@ -98,7 +88,6 @@ class AppState extends ChangeNotifier {
 
   bool get proxyOnly => _storage.proxyOnly;
   bool get autoConnect => _storage.autoConnect;
-  bool get autoSelectBest => _storage.autoSelectBest;
   String get pingMethod => _storage.pingMethod;
 
   bool get showIp => _storage.showIp;
@@ -149,15 +138,10 @@ class AppState extends ChangeNotifier {
       const Duration(hours: 1),
       (_) => unawaited(_scheduledSubscriptionRefresh()),
     );
-    _autoSelectTimer = Timer.periodic(
-      _autoSelectInterval,
-      (_) => unawaited(_autoSelectMonitor()),
-    );
   }
 
   Timer? _updateCheckTimer;
   Timer? _subscriptionRefreshTimer;
-  Timer? _autoSelectTimer;
 
   Future<void> _scheduledSubscriptionRefresh() async {
     if (!_storage.autoRefreshSubscription || _subscriptionUrl == null) {
@@ -318,9 +302,6 @@ class AppState extends ChangeNotifier {
     await Future.wait(jobs);
 
     _isMeasuringDelay = false;
-    if (_storage.autoSelectBest && !isConnected) {
-      _autoSelectFastest();
-    }
     notifyListeners();
   }
 
@@ -350,72 +331,6 @@ class AppState extends ChangeNotifier {
       }
       server.delayCheckedAt = DateTime.now();
       notifyListeners();
-    }
-  }
-
-  void _autoSelectFastest() {
-    var bestIndex = -1;
-    var bestDelay = 1 << 30;
-    for (var i = 2; i < _servers.length; i++) {
-      final delay = _servers[i].delayMs;
-      if (delay != null && delay > 0 && delay < bestDelay) {
-        bestDelay = delay;
-        bestIndex = i;
-      }
-    }
-    if (bestIndex >= 0) {
-      _selectedIndex = bestIndex;
-      _storage.setSelectedServerIndex(bestIndex);
-    }
-  }
-
-  /// Real-time monitoring while connected: every [_autoSelectInterval] measure
-  /// the active server's real HTTP GET ping through the tunnel. If it stays
-  /// healthy nothing happens. When it degrades, rescan all servers with the
-  /// same HTTP GET method and switch to the fastest one, but only if it is at
-  /// least [_switchDiffMs] faster — otherwise the connection would bounce
-  /// between servers every minute.
-  Future<void> _autoSelectMonitor() async {
-    if (!_storage.autoSelectBest || !isConnected || _isMeasuringDelay) {
-      return;
-    }
-    final currentIndex = _selectedIndex;
-
-    int? currentDelay;
-    try {
-      final raw = await VpnService.instance.getConnectedServerDelay();
-      currentDelay = raw > 0 ? raw : null;
-    } catch (_) {}
-    if (currentDelay != null && currentIndex < _servers.length) {
-      _servers[currentIndex].delayMs = currentDelay;
-      _servers[currentIndex].delayCheckedAt = DateTime.now();
-      notifyListeners();
-    }
-    if (currentDelay != null && currentDelay < _healthyDelayMs) {
-      return;
-    }
-
-    await _measureDelays(method: 'get', force: true);
-    if (!isConnected) {
-      return;
-    }
-
-    var bestIndex = -1;
-    var bestDelay = 1 << 30;
-    for (var i = 2; i < _servers.length; i++) {
-      final delay = _servers[i].delayMs;
-      if (delay != null && delay > 0 && delay < bestDelay) {
-        bestDelay = delay;
-        bestIndex = i;
-      }
-    }
-    if (bestIndex < 0 || bestIndex == currentIndex) {
-      return;
-    }
-    final effectiveCurrent = currentDelay ?? _servers[currentIndex].delayMs;
-    if (effectiveCurrent == null ||
-        bestDelay + _switchDiffMs < effectiveCurrent) {
-      await selectServer(bestIndex);
     }
   }
 
@@ -640,11 +555,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setAutoSelectBest(bool value) async {
-    await _storage.setAutoSelectBest(value);
-    notifyListeners();
-  }
-
   Future<void> setPingMethod(String value) async {
     await _storage.setPingMethod(value);
     notifyListeners();
@@ -841,7 +751,6 @@ class AppState extends ChangeNotifier {
     _connectivitySub?.cancel();
     _updateCheckTimer?.cancel();
     _subscriptionRefreshTimer?.cancel();
-    _autoSelectTimer?.cancel();
     super.dispose();
   }
 }

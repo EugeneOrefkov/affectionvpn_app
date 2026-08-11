@@ -183,14 +183,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const _SectionTitle('Подключение'),
                   _Card(
                     children: [
-                      _SwitchRow(
-                        icon: Icons.tune,
-                        title: 'Автовыбор лучшего сервера',
-                        subtitle: 'Подключаться к серверу с наименьшим пингом',
-                        value: state.autoSelectBest,
-                        onChanged: state.setAutoSelectBest,
-                      ),
-                      const Divider(height: 1),
                       _PingMethodSelector(
                         value: state.pingMethod,
                         onChanged: state.setPingMethod,

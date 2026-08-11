@@ -14,7 +14,6 @@ class StorageService {
   static const _kSelectedIndex = 'selected_server_index';
   static const _kProxyOnly = 'proxy_only';
   static const _kAutoConnect = 'auto_connect';
-  static const _kAutoSelectBest = 'auto_select_best';
   static const _kLastUpdateCheck = 'last_update_check';
   static const _kProxyLogin = 'proxy_login';
   static const _kProxyPassword = 'proxy_password';
@@ -79,12 +78,6 @@ class StorageService {
 
   Future<void> setAutoConnect(bool value) async {
     await _prefs.setBool(_kAutoConnect, value);
-  }
-
-  bool get autoSelectBest => _prefs.getBool(_kAutoSelectBest) ?? false;
-
-  Future<void> setAutoSelectBest(bool value) async {
-    await _prefs.setBool(_kAutoSelectBest, value);
   }
 
   DateTime? get lastUpdateCheck {
