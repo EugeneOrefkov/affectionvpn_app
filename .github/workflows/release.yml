@@ -16,7 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # The version comes from the workflow_dispatch input. Runs on main so all
-      # GitHub caches (Flutter SDK, Xray AAR, Gradle) are shared across runs.
+      # GitHub caches (Flutter SDK, Gradle) are shared across runs. The bundled
+      # Xray core comes from the flutter_vless Maven Central AAR, so no native
+      # Xray build is needed here.
       VERSION: ${{ inputs.version }}
     steps:
       - name: Checkout
@@ -62,40 +64,6 @@ jobs:
             echo "AFFECTION_KEY_ALIAS=$ANDROID_KEY_ALIAS"
             echo "AFFECTION_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
           } >> "$HOME/.gradle/gradle.properties"
-
-      - name: Cache built Xray AAR
-        id: cache-xray-aar
-        uses: actions/cache@v4
-        with:
-          path: android/xray-maven
-          key: xray-aar-${{ hashFiles('android/gradle.properties') }}
-
-      - name: Setup Go
-        if: steps.cache-xray-aar.outputs.cache-hit != 'true'
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-
-      - name: Install Android NDK
-        if: steps.cache-xray-aar.outputs.cache-hit != 'true'
-        run: |
-          set -e
-          NDK_DIR="$ANDROID_HOME/ndk/28.2.13676358"
-          if [ -d "$NDK_DIR" ]; then
-            echo "NDK 28.2.13676358 already present, using it."
-            exit 0
-          fi
-          echo "NDK not preinstalled, installing via sdkmanager..."
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          yes | sdkmanager "ndk;28.2.13676358"
-          test -d "$NDK_DIR" || { echo "::error::NDK install failed"; exit 1; }
-
-      - name: Build Xray core AAR
-        if: steps.cache-xray-aar.outputs.cache-hit != 'true'
-        run: |
-          # ANDROID_HOME must be expanded by the shell here: GitHub Actions
-          # does NOT expand $VAR references inside the step-level env block.
-          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" scripts/build_xray_android.sh
 
       - name: Cache Gradle
         uses: actions/cache@v4

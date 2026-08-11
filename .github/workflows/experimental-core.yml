@@ -1,0 +1,73 @@
+name: Build experimental core
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          Xray-core version to build (e.g. 1.8.24). Leave empty to build the
+          latest release tag.
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Install Android NDK
+        run: |
+          set -e
+          NDK_DIR="$ANDROID_HOME/ndk/28.2.13676358"
+          if [ -d "$NDK_DIR" ]; then
+            echo "NDK 28.2.13676358 already present, using it."
+            exit 0
+          fi
+          echo "NDK not preinstalled, installing via sdkmanager..."
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          yes | sdkmanager "ndk;28.2.13676358"
+          test -d "$NDK_DIR" || { echo "::error::NDK install failed"; exit 1; }
+
+      - name: Build libxray.so from sources
+        run: |
+          set -e
+          # ANDROID_HOME must be expanded by the shell here: GitHub Actions
+          # does NOT expand $VAR references inside the step-level env block.
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          VERSION="${{ inputs.version }}"
+          scripts/build_xray_experimental.sh ${VERSION:+"$VERSION"}
+
+      - name: Resolve built version
+        id: version
+        run: |
+          V="$(ls build/experimental/libxray-arm64-v8a-*.so 2>/dev/null | head -1 | sed 's/.*libxray-arm64-v8a-\([0-9.]*\)\.so/\1/')"
+          test -n "$V" || { echo "::error::no built artifacts found"; exit 1; }
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Delete existing experimental-core release (if any)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="experimental-core-v${{ steps.version.outputs.version }}"
+          gh release delete "$TAG" --yes --cleanup-tag || true
+
+      - name: Publish experimental-core release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: experimental-core-v${{ steps.version.outputs.version }}
+          name: Experimental core v${{ steps.version.outputs.version }}
+          body: |
+            libxray.so built from XTLS/Xray-core v${{ steps.version.outputs.version }} sources.
+
+            Install it via the app's experimental core panel: Settings → tap the
+            core row five times → Install experimental core.
+          files: build/experimental/libxray-*.so

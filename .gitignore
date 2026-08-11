@@ -44,5 +44,5 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Locally built Xray core AAR override (scripts/build_xray_android.sh)
-/android/xray-maven/
+# Experimental Xray core builds from sources
+/build/experimental/

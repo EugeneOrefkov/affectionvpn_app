@@ -45,8 +45,6 @@ dependencies:
   path_provider: ^2.1.4
   # SHA-256 integrity check for downloaded update APKs.
   crypto: ^3.0.6
-  # Unzip the experimental Xray-core bundle downloaded from GitHub.
-  archive: ^3.6.1
 
   # State management
   provider: ^6.1.2

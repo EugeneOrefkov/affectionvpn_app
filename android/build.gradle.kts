@@ -1,9 +1,9 @@
 allprojects {
     repositories {
-        // Local override of dev.tfox.fluttervless:xray-android produced by
-        // scripts/build_xray_android.sh. Must come before mavenCentral so the
-        // pinned version resolves even before the plugin author publishes it.
-        maven(url = uri("${rootProject.projectDir}/xray-maven"))
+        // The Xray core is the dev.tfox.fluttervless:xray-android AAR
+        // published on Maven Central by the flutter_vless plugin author.
+        // The pinned version must exist there; experimental cores built from
+        // Xray-core sources are installed at runtime via CoreUpdateService.
         google()
         mavenCentral()
     }
