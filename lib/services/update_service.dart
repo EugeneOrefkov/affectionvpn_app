@@ -6,12 +6,14 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/config/app_config.dart';
 import '../core/utils/device_abi.dart';
 import '../models/update_info.dart';
+import '../state/app_state.dart';
 import 'installer_service.dart';
 
 class UnknownSourceInstallException implements Exception {
@@ -43,21 +45,44 @@ class UpdateService {
   static const _manifestUrl =
       'https://github.com/$_repo/releases/latest/download/latest.json';
 
+  /// Client for update requests. When the app's own tunnel is active it is
+  /// routed through the local HTTP inbound (which is not captured by the
+  /// VPN service, since the app excludes itself), so GitHub stays reachable
+  /// even when direct access is blocked; otherwise it connects directly.
+  http.Client _tunnelClient() {
+    final proxy = AppState.instance?.activeTunnelProxy;
+    if (proxy == null) {
+      return http.Client();
+    }
+    final raw = HttpClient();
+    final auth = (proxy.username != null && proxy.username!.isNotEmpty)
+        ? '${proxy.username}:${proxy.password}@'
+        : '';
+    raw.findProxy = (_) => 'PROXY $auth${proxy.host}:${proxy.port};DIRECT';
+    return IOClient(raw);
+  }
+
   Future<UpdateInfo?> checkForUpdate({required String currentVersion}) async {
-    final response = await http
-        .get(Uri.parse(_manifestUrl), headers: _headers)
-        .timeout(const Duration(seconds: 15));
+    final client = _tunnelClient();
+    try {
+      final response = await client
+          .get(Uri.parse(_manifestUrl), headers: _headers)
+          .timeout(const Duration(seconds: 15));
 
-    if (response.statusCode == 404) {
-      return null;
-    }
-    if (response.statusCode != 200) {
-      throw Exception('Проверка обновлений ответила: ${response.statusCode}');
-    }
+      if (response.statusCode == 404) {
+        return null;
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Проверка обновлений ответила: ${response.statusCode}');
+      }
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final abi = await deviceAbiKey();
-    return parseManifest(data, currentVersion: currentVersion, abi: abi);
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final abi = await deviceAbiKey();
+      return parseManifest(data, currentVersion: currentVersion, abi: abi);
+    } finally {
+      client.close();
+    }
   }
 
   /// Turns a decoded `latest.json` manifest into an [UpdateInfo] for the given
@@ -119,48 +144,55 @@ class UpdateService {
     final dir = await getApplicationDocumentsDirectory();
     final path = destPath ?? '${dir.path}/affection_vpn_update.apk';
 
-    final request = http.Request('GET', Uri.parse(url));
-    request.headers['User-Agent'] = 'AffectionVPN/1.0 (Xray; VLESS)';
-
-    final streamed = await request.send().timeout(const Duration(seconds: 30));
-    if (streamed.statusCode != 200) {
-      throw Exception('Скачивание не удалось: ${streamed.statusCode}');
-    }
-
-    final total = streamed.contentLength ?? 0;
-    final file = File(path);
-    final sink = file.openWrite();
-    var received = 0;
+    final client = _tunnelClient();
     try {
-      // Add a per-chunk idle timeout so a stalled/mid-stream disconnect
-      // does not leave the user with a frozen download button. The total
-      // download is bounded by `request.send` plus this chunk-idle timer.
-      await for (final chunk
-          in streamed.stream.timeout(const Duration(seconds: 30))) {
-        received += chunk.length;
-        sink.add(chunk);
-        onProgress?.call(received, total);
+      final request = http.Request('GET', Uri.parse(url));
+      request.headers['User-Agent'] = 'AffectionVPN/1.0 (Xray; VLESS)';
+
+      final streamed =
+          await client.send(request).timeout(const Duration(seconds: 30));
+      if (streamed.statusCode != 200) {
+        throw Exception('Скачивание не удалось: ${streamed.statusCode}');
       }
-    } on TimeoutException catch (_) {
-      await sink.flush();
-      await sink.close();
-      await file.delete();
-      throw const SocketException('Загрузка прервана: нет данных больше 30 секунд');
+
+      final total = streamed.contentLength ?? 0;
+      final file = File(path);
+      final sink = file.openWrite();
+      var received = 0;
+      try {
+        // Add a per-chunk idle timeout so a stalled/mid-stream disconnect
+        // does not leave the user with a frozen download button. The total
+        // download is bounded by `request.send` plus this chunk-idle timer.
+        await for (final chunk
+            in streamed.stream.timeout(const Duration(seconds: 30))) {
+          received += chunk.length;
+          sink.add(chunk);
+          onProgress?.call(received, total);
+        }
+      } on TimeoutException catch (_) {
+        await sink.flush();
+        await sink.close();
+        await file.delete();
+        throw const SocketException(
+            'Загрузка прервана: нет данных больше 30 секунд');
+      } finally {
+        await sink.flush();
+        await sink.close();
+      }
+
+      if (total > 0 && received < total) {
+        await file.delete();
+        throw Exception('Загрузка прервана');
+      }
+
+      if (!await _verifySha256(path, expectedSha256)) {
+        await file.delete();
+        throw const ChecksumMismatchException();
+      }
+      return path;
     } finally {
-      await sink.flush();
-      await sink.close();
+      client.close();
     }
-
-    if (total > 0 && received < total) {
-      await file.delete();
-      throw Exception('Загрузка прервана');
-    }
-
-    if (!await _verifySha256(path, expectedSha256)) {
-      await file.delete();
-      throw const ChecksumMismatchException();
-    }
-    return path;
   }
 
   Future<void> install(String path) async {

@@ -14,7 +14,7 @@ Future<void> initializeAppWindow() async {
   await windowManager.ensureInitialized();
 
   const windowOptions = WindowOptions(
-    size: Size(1024, 700),
+    size: Size(1280, 900),
     minimumSize: Size(380, 600),
     center: true,
     backgroundColor: Colors.transparent,
@@ -34,15 +34,110 @@ class WindowFrame extends StatelessWidget {
 
   final Widget child;
 
+  static const double _kResizeEdgeSize = 6;
+
   @override
   Widget build(BuildContext context) {
     if (!Platform.isLinux) return child;
 
-    return Column(
+    return Stack(
       children: [
-        const WindowTitleBar(),
-        Expanded(child: child),
+        Column(
+          children: [
+            const WindowTitleBar(),
+            Expanded(child: child),
+          ],
+        ),
+        // Transparent resize handles for the frameless window. Painted on
+        // top of the content edges so the window can be resized by dragging.
+        const Positioned(
+          top: 0,
+          left: _kResizeEdgeSize,
+          right: _kResizeEdgeSize,
+          height: _kResizeEdgeSize,
+          child: _ResizeHandle(ResizeEdge.top, SystemMouseCursors.resizeUp),
+        ),
+        const Positioned(
+          top: 0,
+          bottom: _kResizeEdgeSize,
+          left: 0,
+          width: _kResizeEdgeSize,
+          child: _ResizeHandle(ResizeEdge.left, SystemMouseCursors.resizeLeft),
+        ),
+        const Positioned(
+          top: 0,
+          bottom: _kResizeEdgeSize,
+          right: 0,
+          width: _kResizeEdgeSize,
+          child: _ResizeHandle(ResizeEdge.right, SystemMouseCursors.resizeRight),
+        ),
+        const Positioned(
+          bottom: 0,
+          left: _kResizeEdgeSize,
+          right: _kResizeEdgeSize,
+          height: _kResizeEdgeSize,
+          child: _ResizeHandle(ResizeEdge.bottom, SystemMouseCursors.resizeDown),
+        ),
+        const Positioned(
+          top: 0,
+          left: 0,
+          width: _kResizeEdgeSize,
+          height: _kResizeEdgeSize,
+          child: _ResizeHandle(
+            ResizeEdge.topLeft,
+            SystemMouseCursors.resizeUpLeft,
+          ),
+        ),
+        const Positioned(
+          top: 0,
+          right: 0,
+          width: _kResizeEdgeSize,
+          height: _kResizeEdgeSize,
+          child: _ResizeHandle(
+            ResizeEdge.topRight,
+            SystemMouseCursors.resizeUpRight,
+          ),
+        ),
+        const Positioned(
+          bottom: 0,
+          left: 0,
+          width: _kResizeEdgeSize,
+          height: _kResizeEdgeSize,
+          child: _ResizeHandle(
+            ResizeEdge.bottomLeft,
+            SystemMouseCursors.resizeDownLeft,
+          ),
+        ),
+        const Positioned(
+          bottom: 0,
+          right: 0,
+          width: _kResizeEdgeSize,
+          height: _kResizeEdgeSize,
+          child: _ResizeHandle(
+            ResizeEdge.bottomRight,
+            SystemMouseCursors.resizeDownRight,
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _ResizeHandle extends StatelessWidget {
+  const _ResizeHandle(this.edge, this.cursor);
+
+  final ResizeEdge edge;
+  final MouseCursor cursor;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: cursor,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onPanStart: (_) => windowManager.startResizing(edge),
+        child: const SizedBox.expand(),
+      ),
     );
   }
 }

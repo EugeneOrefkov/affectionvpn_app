@@ -70,11 +70,30 @@ class VpnService {
   /// reach the internet through the tunnel for the IP/speed widgets.
   static const internalSocksPort = 10900;
 
+  /// Port of the app's internal loopback HTTP (CONNECT) inbound, injected
+  /// next to [internalSocksPort]. Unlike SOCKS, it can be used by `dart:io`
+  /// via [HttpClient.findProxy], which is how the in-app update reaches GitHub
+  /// through the tunnel even when direct access is blocked.
+  static const internalHttpPort = 10901;
+
+  /// Port of the app's internal loopback authenticated HTTP (CONNECT) inbound
+  /// used in proxy-only mode (the counterpart of [proxyPort]'s SOCKS inbound).
+  static const authHttpPort = 10811;
+
   /// The actual port picked for the internal socks inbound by the last
   /// [buildInternalSocksConfig] call.
   int? lastInternalSocksPort;
 
-  /// Injects a no-auth SOCKS inbound on 127.0.0.1 used only by the app itself.
+  /// The actual port picked for the internal http inbound by the last
+  /// [buildInternalSocksConfig] call.
+  int? lastInternalHttpPort;
+
+  /// The actual port picked for the authenticated http inbound by the last
+  /// [buildAuthProxyConfig] call.
+  int? lastAuthHttpPort;
+
+  /// Injects no-auth SOCKS5 and HTTP (CONNECT) inbounds on 127.0.0.1 used only
+  /// by the app itself.
   String buildInternalSocksConfig(String config) {
     final map = jsonDecode(config) as Map<String, dynamic>;
     final inbounds = <Map<String, dynamic>>[];
@@ -88,18 +107,33 @@ class VpnService {
         }
       }
     }
-    var port = internalSocksPort;
-    while (usedPorts.contains(port)) {
-      port++;
+    var socksPort = internalSocksPort;
+    while (usedPorts.contains(socksPort)) {
+      socksPort++;
     }
-    lastInternalSocksPort = port;
+    usedPorts.add(socksPort);
+    lastInternalSocksPort = socksPort;
     inbounds.add({
       'tag': 'socks-app',
-      'port': port,
+      'port': socksPort,
       'listen': '127.0.0.1',
       'protocol': 'socks',
       'settings': {'auth': 'noauth', 'udp': true},
     });
+
+    var httpPort = internalHttpPort;
+    while (usedPorts.contains(httpPort)) {
+      httpPort++;
+    }
+    usedPorts.add(httpPort);
+    lastInternalHttpPort = httpPort;
+    inbounds.add({
+      'tag': 'http-app',
+      'port': httpPort,
+      'listen': '127.0.0.1',
+      'protocol': 'http',
+    });
+
     map['inbounds'] = inbounds;
     return jsonEncode(_ensureAccessLog(map));
   }
@@ -157,13 +191,14 @@ class VpnService {
         }
       }
     }
-    var port = proxyPort;
-    while (usedPorts.contains(port)) {
-      port++;
+    var socksPort = proxyPort;
+    while (usedPorts.contains(socksPort)) {
+      socksPort++;
     }
+    usedPorts.add(socksPort);
     inbounds.add({
       'tag': 'socks-auth',
-      'port': port,
+      'port': socksPort,
       'listen': '0.0.0.0',
       'protocol': 'socks',
       'settings': {
@@ -178,6 +213,25 @@ class VpnService {
         'destOverride': ['http', 'tls'],
       },
     });
+
+    var httpPort = authHttpPort;
+    while (usedPorts.contains(httpPort)) {
+      httpPort++;
+    }
+    usedPorts.add(httpPort);
+    lastAuthHttpPort = httpPort;
+    inbounds.add({
+      'tag': 'http-auth',
+      'port': httpPort,
+      'listen': '127.0.0.1',
+      'protocol': 'http',
+      'settings': {
+        'accounts': [
+          {'user': login, 'pass': password},
+        ],
+      },
+    });
+
     map['inbounds'] = inbounds;
     return jsonEncode(_ensureAccessLog(map));
   }

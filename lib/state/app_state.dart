@@ -510,6 +510,32 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  /// HTTP (CONNECT) proxy endpoint the app can route its own `dart:io`
+  /// requests through while the tunnel is active, so the in-app update keeps
+  /// working even when direct access to GitHub is blocked. Null when
+  /// disconnected. Uses the app-local inbounds injected by [VpnService].
+  ({String host, int port, String? username, String? password})?
+      get activeTunnelProxy {
+    if (!isConnected) {
+      return null;
+    }
+    if (proxyOnly) {
+      return (
+        host: '127.0.0.1',
+        port: VpnService.instance.lastAuthHttpPort ?? VpnService.authHttpPort,
+        username: _storage.proxyLogin,
+        password: _storage.proxyPassword,
+      );
+    }
+    return (
+      host: '127.0.0.1',
+      port: VpnService.instance.lastInternalHttpPort ??
+          VpnService.internalHttpPort,
+      username: null,
+      password: null,
+    );
+  }
+
   /// Public IP visible from the network (through the tunnel when connected,
   /// otherwise the real IP). Null on any failure.
   Future<String?> fetchCurrentIp() => _networkHttp.fetchIp();

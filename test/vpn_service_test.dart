@@ -55,6 +55,38 @@ void main() {
     expect(log['loglevel'], 'info');
   });
 
+  test('buildAuthProxyConfig adds authenticated HTTP inbound for the app', () {
+    const baseConfig = '{"inbounds":[],"outbounds":[]}';
+
+    final result =
+        VpnService.instance.buildAuthProxyConfig(baseConfig, 'u', 'p');
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final inbounds = (map['inbounds'] as List).cast<Map<String, dynamic>>();
+    final http = inbounds.lastWhere((e) => e['tag'] == 'http-auth');
+
+    expect(http['listen'], '127.0.0.1');
+    expect(http['port'], VpnService.authHttpPort);
+    expect(http['protocol'], 'http');
+    final accounts =
+        ((http['settings'] as Map)['accounts'] as List).cast<Map>();
+    expect(accounts.first['user'], 'u');
+    expect(accounts.first['pass'], 'p');
+    expect(VpnService.instance.lastAuthHttpPort, VpnService.authHttpPort);
+  });
+
+  test('buildAuthProxyConfig picks a free HTTP port', () {
+    const baseConfig = '{"inbounds":[{"port":10811,"protocol":"http"}],"outbounds":[]}';
+
+    final result =
+        VpnService.instance.buildAuthProxyConfig(baseConfig, 'u', 'p');
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final inbounds = (map['inbounds'] as List).cast<Map<String, dynamic>>();
+    final http = inbounds.lastWhere((e) => e['tag'] == 'http-auth');
+    expect(http['port'], 10812);
+  });
+
   test('buildInternalSocksConfig points the core access log for the request log',
       () {
     const baseConfig = '{"inbounds":[],"outbounds":[]}';
@@ -77,5 +109,35 @@ void main() {
     final log = map['log'] as Map<String, dynamic>;
     expect(log['access'], isNotEmpty);
     expect(log['loglevel'], 'info');
+  });
+
+  test('buildInternalSocksConfig adds a no-auth HTTP inbound for the app', () {
+    const baseConfig = '{"inbounds":[],"outbounds":[]}';
+
+    final result = VpnService.instance.buildInternalSocksConfig(baseConfig);
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final inbounds = (map['inbounds'] as List).cast<Map<String, dynamic>>();
+    final http = inbounds.lastWhere((e) => e['tag'] == 'http-app');
+
+    expect(http['listen'], '127.0.0.1');
+    expect(http['port'], VpnService.internalHttpPort);
+    expect(http['protocol'], 'http');
+    expect(VpnService.instance.lastInternalHttpPort, VpnService.internalHttpPort);
+  });
+
+  test('buildInternalSocksConfig picks free ports avoiding collisions', () {
+    const baseConfig =
+        '{"inbounds":[{"tag":"x","port":10900,"protocol":"socks"}],"outbounds":[]}';
+
+    final result = VpnService.instance.buildInternalSocksConfig(baseConfig);
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final inbounds = (map['inbounds'] as List).cast<Map<String, dynamic>>();
+    final socks = inbounds.lastWhere((e) => e['tag'] == 'socks-app');
+    final http = inbounds.lastWhere((e) => e['tag'] == 'http-app');
+
+    expect(socks['port'], 10901);
+    expect(http['port'], 10902);
   });
 }
