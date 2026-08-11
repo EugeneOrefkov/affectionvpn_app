@@ -72,8 +72,9 @@ class LinuxVlessPlatform extends VlessPlatform {
     required String groupIdentifier,
   }) async {
     _onStatus = onStatusChanged;
-    _xrayPath = _findXray();
-    _assetDir = _findAssetDir(_xrayPath);
+    final xray = await _findXray();
+    _xrayPath = xray;
+    _assetDir = _findAssetDir(xray);
   }
 
   @override
@@ -88,7 +89,12 @@ class LinuxVlessPlatform extends VlessPlatform {
     List<String>? bypassSubnets,
     bool proxyOnly = false,
   }) async {
-    final xray = _xrayPath;
+    // Re-resolve on every connect so an experimental core installed while the
+    // app was running is picked up without a restart (mirrors Android, where
+    // XrayCoreManager checks filesDir/xray_core on each connection).
+    final xray = await _findXray();
+    _xrayPath = xray;
+    _assetDir = _findAssetDir(xray);
     if (xray == null) {
       throw Exception(
         'Бинарь xray не найден. Установите пакет xray '
@@ -236,7 +242,7 @@ class LinuxVlessPlatform extends VlessPlatform {
 
   @override
   Future<String> getCoreVersion() async {
-    final xray = _xrayPath;
+    final xray = await _findXray() ?? _xrayPath;
     if (xray == null) {
       return 'xray not found';
     }
@@ -388,7 +394,18 @@ class LinuxVlessPlatform extends VlessPlatform {
 
   // ---- xray discovery -----------------------------------------------------
 
-  String? _findXray() {
+  /// Resolves the xray binary to run. An experimental core installed by the
+  /// app (documents/xray_core/xray) wins over the system-installed core; the
+  /// same precedence the Android plugin uses for libxray.so.
+  Future<String?> _findXray() async {
+    try {
+      final experimental = File(
+        '${(await getApplicationDocumentsDirectory()).path}/xray_core/xray',
+      );
+      if (experimental.existsSync()) {
+        return experimental.path;
+      }
+    } catch (_) {}
     final env = Platform.environment['FLUTTER_VLESS_XRAY'];
     if (env != null && env.isNotEmpty && File(env).existsSync()) {
       return env;
@@ -418,11 +435,14 @@ class LinuxVlessPlatform extends VlessPlatform {
       return null;
     }
     final candidates = [
+      // The core's own directory first: an experimental install carries
+      // geoip.dat/geosite.dat next to xray, and must not pick up older
+      // system-wide geo databases.
+      File(xrayPath).parent.path,
       '/usr/lib/affection-vpn',
       // Arch: xray package → /usr/share/xray/, AUR → /usr/share/v2ray/
       '/usr/share/xray',
       '/usr/share/v2ray',
-      File(xrayPath).parent.path,
       Platform.environment['XRAY_LOCATION_ASSET'],
     ];
     for (final dir in candidates) {

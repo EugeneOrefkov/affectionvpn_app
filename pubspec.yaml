@@ -45,6 +45,8 @@ dependencies:
   path_provider: ^2.1.4
   # SHA-256 integrity check for downloaded update APKs.
   crypto: ^3.0.6
+  # Unpack the experimental Xray-core zip downloaded for Linux.
+  archive: ^3.6.1
 
   # State management
   provider: ^6.1.2

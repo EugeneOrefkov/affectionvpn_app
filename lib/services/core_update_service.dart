@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -9,11 +10,15 @@ import '../core/utils/device_abi.dart';
 
 /// Installs experimental Xray cores built from the Xray-core sources.
 ///
-/// The stable core is bundled in the APK (flutter_vless AAR from Maven
-/// Central). Experimental cores are compiled from XTLS/Xray-core by
-/// scripts/build_xray_experimental.sh and published to the
-/// `experimental-core` branch of this repo, from where they are downloaded
-/// via raw.githubusercontent.com (no GitHub release involved).
+/// The stable core is bundled with the app (flutter_vless AAR from Maven
+/// Central on Android, the staged `xray` binary on Linux). Experimental cores
+/// track upstream XTLS/Xray-core releases:
+///   - Android: built from sources by scripts/build_xray_experimental.sh and
+///     published to the `experimental-core` branch of this repo, downloaded
+///     via raw.githubusercontent.com (no GitHub release involved);
+///   - Linux: the official Xray-linux-64.zip is downloaded straight from the
+///     upstream release and unpacked (it carries the xray binary plus
+///     geoip.dat/geosite.dat).
 class CoreUpdateService {
   CoreUpdateService._();
   static final CoreUpdateService instance = CoreUpdateService._();
@@ -22,8 +27,8 @@ class CoreUpdateService {
       'https://api.github.com/repos/XTLS/Xray-core/releases';
   static const _headers = {'User-Agent': 'AffectionVPN/1.0'};
 
-  /// ABIs with a source-built experimental core available.
-  static const _supportedAbis = {'arm64-v8a', 'x86_64'};
+  /// Platforms with an experimental core available.
+  static const _supportedAbis = {'arm64-v8a', 'x86_64', 'linux-x64'};
 
   /// Latest stable Xray-core release tag (without the leading "v").
   Future<String?> fetchLatestVersion() async {
@@ -75,26 +80,74 @@ class CoreUpdateService {
       throw Exception('Экспериментальное ядро недоступно для этого устройства');
     }
 
+    final dir = Directory(
+      '${(await getApplicationDocumentsDirectory()).path}/xray_core',
+    );
+    await dir.create(recursive: true);
+
+    if (abi == 'linux-x64') {
+      await _installLinux(dir, version);
+    } else {
+      await _installAndroid(dir, version, abi);
+    }
+    await File('${dir.path}/version').writeAsString(version);
+  }
+
+  /// Android: download the source-built libxray.so from the
+  /// `experimental-core` branch of this repo.
+  Future<void> _installAndroid(Directory dir, String version, String abi) async {
     final url = Uri.parse(
       'https://raw.githubusercontent.com/${AppConfig.githubOwner}/'
       '${AppConfig.githubRepo}/experimental-core/'
       'libxray-$abi-$version.so',
     );
-
     final tempDir = await getTemporaryDirectory();
     final soFile = File('${tempDir.path}/xray_experimental_$version.so');
     await _download(url, soFile);
-
     try {
-      final dir = Directory(
-        '${(await getApplicationDocumentsDirectory()).path}/xray_core',
-      );
-      await dir.create(recursive: true);
       await soFile.copy('${dir.path}/libxray.so');
-      await File('${dir.path}/version').writeAsString(version);
     } finally {
       if (soFile.existsSync()) {
         await soFile.delete();
+      }
+    }
+  }
+
+  /// Linux: unpack the official Xray-linux-64.zip (xray + geoip.dat +
+  /// geosite.dat) straight from the upstream release.
+  Future<void> _installLinux(Directory dir, String version) async {
+    final url = Uri.parse(
+      'https://github.com/XTLS/Xray-core/releases/download/'
+      'v$version/Xray-linux-64.zip',
+    );
+    final tempDir = await getTemporaryDirectory();
+    final zipFile = File('${tempDir.path}/xray_experimental_$version.zip');
+    await _download(url, zipFile);
+
+    try {
+      final archive = ZipDecoder().decodeBytes(await zipFile.readAsBytes());
+      const wanted = {'xray', 'geoip.dat', 'geosite.dat'};
+      var foundXray = false;
+      for (final entry in archive.files) {
+        if (!entry.isFile || !wanted.contains(entry.name)) {
+          continue;
+        }
+        if (entry.name == 'xray') {
+          foundXray = true;
+        }
+        await File('${dir.path}/${entry.name}')
+            .writeAsBytes(entry.content, flush: true);
+      }
+      final xray = File('${dir.path}/xray');
+      if (!foundXray || !xray.existsSync()) {
+        throw Exception('В архиве Xray не найден бинарь xray');
+      }
+      try {
+        await Process.run('chmod', ['755', xray.path]);
+      } catch (_) {}
+    } finally {
+      if (zipFile.existsSync()) {
+        await zipFile.delete();
       }
     }
   }
