@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Build libxray.so from the Xray-core sources for the ABIs supported by the
 # experimental core panel (arm64-v8a + x86_64) and drop the .so files into
-# build/experimental/ for upload to a GitHub release.
+# build/experimental/ for publication to the experimental-core branch.
 #
 # The stable core bundled in the APK comes from the
 # dev.tfox.fluttervless:xray-android AAR on Maven Central. Experimental cores
 # are built straight from XTLS/Xray-core so they can track upstream releases
-# before the plugin author packages them.
+# (including prereleases, which is how XTLS ships every new build).
 #
 # Usage:
 #   scripts/build_xray_experimental.sh [VERSION]
@@ -25,6 +25,7 @@
 # Prerequisites:
 #   - Go >= 1.26
 #   - Android NDK 28.x (set ANDROID_NDK_HOME, default ~/Android/Sdk/ndk/28.2.13676358)
+#   - python3 (for resolving the latest release tag)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,9 +35,19 @@ NDK_PATH="${ANDROID_NDK_HOME:-$HOME/Android/Sdk/ndk/28.2.13676358}"
 
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
+    # XTLS marks every current Xray-core release as a prerelease, so
+    # /releases/latest lags behind. Take the first release tag instead.
     VERSION="$(curl -fsSL --max-time 60 \
-        "https://api.github.com/repos/XTLS/Xray-core/releases/latest" \
-        | grep -o '"tag_name":[^,]*' | head -1 | sed 's/.*"v\?\([^"]*\)"/\1/')"
+        "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=10" \
+        | python3 -c "
+import json, sys
+for r in json.load(sys.stdin):
+    t = r.get('tag_name', '')
+    p = t.lstrip('v').split('.')
+    if len(p) == 3 and all(x.isdigit() for x in p):
+        print('.'.join(p))
+        break
+")"
 fi
 VERSION="${VERSION#v}"
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

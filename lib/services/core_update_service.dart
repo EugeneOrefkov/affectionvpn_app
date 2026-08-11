@@ -30,11 +30,16 @@ class CoreUpdateService {
   /// Platforms with an experimental core available.
   static const _supportedAbis = {'arm64-v8a', 'x86_64', 'linux-x64'};
 
-  /// Latest stable Xray-core release tag (without the leading "v").
+  /// Latest Xray-core release tag (without the leading "v").
+  ///
+  /// XTLS marks every current Xray-core release as a prerelease, so
+  /// `releases/latest` (which only returns non-prereleases) lags behind.
+  /// The experimental panel is meant to track the newest upstream build, so
+  /// the first release tag is used regardless of its prerelease flag.
   Future<String?> fetchLatestVersion() async {
     for (final url in [
-      '$_xrayReleases/latest',
       '$_xrayReleases?per_page=10',
+      '$_xrayReleases/latest',
     ]) {
       try {
         final response = await http
