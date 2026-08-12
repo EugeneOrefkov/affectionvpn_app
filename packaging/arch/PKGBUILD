@@ -11,7 +11,7 @@
 # present).
 
 pkgname=affection-vpn
-pkgver=1.1.21
+pkgver=1.2.0
 pkgrel=1
 pkgdesc="Native Linux Xray (VLESS) VPN client with subscription support"
 arch=('x86_64')
@@ -31,7 +31,7 @@ source=(
   'affection-vpn.png'
 )
 sha256sums=(
-  'e56a3ec8a5041ed5566d20980a0deaf004c674216a16fad3dbb3d41ff0227b58'
+  'f8d3b6bdfd94adc34a4494223e4202c32c2c9a3f00d465a549c94431125a9c09'
   'c609907a827a371fafc466beed43fb412b57d5eac0232fdbe72e306e15d08f46'
   '3c34e1f298d0c9ea3455d46db6b7759c8211a49e9ec6e44b635fc5c87dfb4180'
 )
