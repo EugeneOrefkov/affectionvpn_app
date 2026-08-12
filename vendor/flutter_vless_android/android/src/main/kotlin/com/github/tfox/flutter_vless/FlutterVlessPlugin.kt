@@ -48,15 +48,25 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
     private val executor = Executors.newFixedThreadPool(8)
     private lateinit var vpnControlMethod: MethodChannel
     private lateinit var vpnStatusEvent: EventChannel
+    private lateinit var coreLogEvent: EventChannel
     private var vpnStatusSink: EventChannel.EventSink? = null
     private var activity: Activity? = null
     private var xrayReceiver: BroadcastReceiver? = null
     private var pendingResult: MethodChannel.Result? = null
     private lateinit var context: Context
 
+    // Raw xray core output, capped so the buffer cannot grow unbounded. Lines
+    // arrive via a broadcast from the daemon process (the core runs in
+    // `:RunSoLibXrayDaemon`), are buffered here in the main process and replayed
+    // to Flutter (Settings → "Логи ядра") when the event stream is listened to.
+    private val coreLogLines = ArrayList<String>()
+    private var coreLogSink: EventChannel.EventSink? = null
+    private var coreLogReceiver: BroadcastReceiver? = null
+
     companion object {
         private const val REQUEST_CODE_VPN_PERMISSION = 24
         private const val REQUEST_CODE_POST_NOTIFICATIONS = 1
+        private const val CORE_LOG_MAX_LINES = 2000
     }
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -65,6 +75,8 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
         vpnControlMethod = MethodChannel(binding.binaryMessenger, "flutter_vless")
         // Channel for streaming status updates (Connected, Disconnected, Traffic stats)
         vpnStatusEvent = EventChannel(binding.binaryMessenger, "flutter_vless/status")
+        // Channel for streaming the raw xray core output to Flutter.
+        coreLogEvent = EventChannel(binding.binaryMessenger, "flutter_vless/core_log")
 
         vpnControlMethod.setMethodCallHandler(this)
         vpnStatusEvent.setStreamHandler(object : EventChannel.StreamHandler {
@@ -78,6 +90,21 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
                 unregisterReceiver()
             }
         })
+        coreLogEvent.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                coreLogSink = events
+                // Replay everything buffered so far: the daemon may have started
+                // the core (and emitted lines) long before the UI subscribed.
+                synchronized(coreLogLines) {
+                    for (line in coreLogLines) events?.success(line)
+                }
+            }
+
+            override fun onCancel(arguments: Any?) {
+                coreLogSink = null
+            }
+        })
+        registerCoreLogReceiver()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -219,6 +246,17 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
                     }
                 }
             }
+            "getCoreLogs" -> {
+                synchronized(coreLogLines) {
+                    result.success(ArrayList(coreLogLines))
+                }
+            }
+            "clearCoreLogs" -> {
+                synchronized(coreLogLines) {
+                    coreLogLines.clear()
+                }
+                result.success(null)
+            }
             "requestPermission" -> {
                 // Requests VPN permission from the OS
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -292,9 +330,50 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
         }
     }
 
+    /**
+     * Registers a receiver that collects the raw xray core output broadcast by
+     * the daemon process. The receiver lives for the whole plugin lifetime so
+     * the buffer keeps filling even while no Flutter screen is subscribed; the
+     * event channel replays it whenever the UI listens again.
+     */
+    private fun registerCoreLogReceiver() {
+        if (coreLogReceiver != null) return
+        coreLogReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val line = intent?.getStringExtra(AppConfigs.V2RAY_CORE_LOG_EXTRA) ?: return
+                synchronized(coreLogLines) {
+                    coreLogLines.add(line)
+                    if (coreLogLines.size > CORE_LOG_MAX_LINES) {
+                        coreLogLines.removeAt(0)
+                    }
+                }
+                coreLogSink?.success(line)
+            }
+        }
+        val filter = IntentFilter(AppConfigs.V2RAY_CORE_LOG)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(coreLogReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            context.registerReceiver(coreLogReceiver, filter)
+        }
+    }
+
+    private fun unregisterCoreLogReceiver() {
+        if (coreLogReceiver != null) {
+            try {
+                context.unregisterReceiver(coreLogReceiver)
+            } catch (e: Exception) {
+                // ignore
+            }
+            coreLogReceiver = null
+        }
+    }
+
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         vpnControlMethod.setMethodCallHandler(null)
         vpnStatusEvent.setStreamHandler(null)
+        coreLogEvent.setStreamHandler(null)
+        unregisterCoreLogReceiver()
         executor.shutdown()
     }
 

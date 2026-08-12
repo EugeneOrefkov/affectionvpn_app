@@ -414,6 +414,17 @@ object XrayCoreManager {
                 monitored.inputStream.bufferedReader().use { reader ->
                     reader.forEachLine { line ->
                         Log.d(TAG, "xray: $line")
+                        // Forward the line to the main process so the app can
+                        // show it in Settings → "Логи ядра" (the core runs in
+                        // the daemon process, so a broadcast is the only way to
+                        // reach the Flutter UI).
+                        try {
+                            val logIntent = Intent(AppConfigs.V2RAY_CORE_LOG)
+                            logIntent.putExtra(AppConfigs.V2RAY_CORE_LOG_EXTRA, line)
+                            context.sendBroadcast(logIntent)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to broadcast core log line", e)
+                        }
                     }
                 }
 

@@ -11,6 +11,7 @@ import 'core/utils/messenger.dart';
 import 'core/widgets/no_scrollbar_behavior.dart';
 import 'core/window/app_window.dart';
 import 'screens/splash_screen.dart';
+import 'services/core_log_service.dart';
 import 'services/linux_tray.dart';
 import 'services/linux_vless_platform.dart';
 import 'state/app_state.dart';
@@ -22,6 +23,9 @@ Future<void> main() async {
     _registerTrayShutdownBridge();
     await initializeAppWindow();
   }
+  // On Android the raw xray core output is streamed from the daemon process;
+  // subscribe before the first frame so the Settings screen can show it.
+  unawaited(CoreLogService.instance.init());
   runApp(const AffectionVpnApp());
 }
 

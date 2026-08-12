@@ -16,6 +16,14 @@ object AppConfigs {
     const val V2RAY_CONNECTION_INFO = "com.github.tfox.flutter_vless.xray.V2RAY_CONNECTION_INFO"
 
     /**
+     * Action of the broadcast carrying one raw xray core output line from the
+     * daemon process (where the core runs) to the main process, which forwards
+     * it to Flutter (Settings → "Логи ядра").
+     */
+    const val V2RAY_CORE_LOG = "com.github.tfox.flutter_vless.xray.V2RAY_CORE_LOG"
+    const val V2RAY_CORE_LOG_EXTRA = "LINE"
+
+    /**
      * Commands sent to the XrayVPNService via Intent.
      */
     enum class V2RAY_SERVICE_COMMANDS : Serializable {
