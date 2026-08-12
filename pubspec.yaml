@@ -68,6 +68,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
   # Linux platform backend integration tests register the real plugins.
   path_provider_linux: ^2.2.1
   path_provider_platform_interface: ^2.1.2

@@ -339,30 +339,48 @@ class LinuxVlessPlatform extends VlessPlatform {
         'protocol': 'dokodemo-door',
         'settings': {'address': '127.0.0.1'},
       });
+      // Prepended so the api door is always served by the StatsService: the
+      // config may ship no routing section at all, or a catch-all
+      // `network: tcp,udp` rule (e.g. the Remnawave load-balancer nodes) that
+      // would otherwise swallow the stats door's connections and tunnel them
+      // through the proxy (or, without routing, loop the request back into the
+      // core on its own port).
       final routing = map['routing'];
+      final rules = (routing is Map && routing['rules'] is List)
+          ? (routing['rules'] as List).toList()
+          : <dynamic>[];
+      rules.insert(0, {
+        'type': 'field',
+        'inboundTag': ['api'],
+        'outboundTag': 'api',
+      });
       if (routing is Map) {
-        final rules = ((routing['rules'] as List?) ?? const []).toList();
-        rules.add({
-          'type': 'field',
-          'inboundTag': ['api'],
-          'outboundTag': 'api',
-        });
         routing['rules'] = rules;
+      } else {
+        map['routing'] = {'rules': rules};
       }
       // dokodemo-door is inbound-only; the api inbound is answered by the
       // StatsService itself via the routing rule above, so no outbound is added.
       map['api'] = {'tag': 'api', 'services': ['StatsService']};
     }
 
+    // Registers the app/stats counter manager. The `api` section above only
+    // exposes the gRPC service; without this the counters are never recorded
+    // and /stats/outbound reports nothing (traffic counters stay at zero).
+    map['stats'] = <String, dynamic>{};
+
     final policy = map['policy'];
+    final systemPolicy = (policy is Map && policy['system'] is Map)
+        ? policy['system'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    systemPolicy['statsInboundUplink'] = true;
+    systemPolicy['statsInboundDownlink'] = true;
+    systemPolicy['statsOutboundUplink'] = true;
+    systemPolicy['statsOutboundDownlink'] = true;
     if (policy is Map) {
-      final system = policy['system'];
-      if (system is Map) {
-        system['statsInboundUplink'] = true;
-        system['statsInboundDownlink'] = true;
-        system['statsOutboundUplink'] = true;
-        system['statsOutboundDownlink'] = true;
-      }
+      policy['system'] = systemPolicy;
+    } else {
+      map['policy'] = {'system': systemPolicy};
     }
 
     if (accessLogPath != null && accessLogPath.isNotEmpty) {
@@ -532,18 +550,30 @@ class LinuxVlessPlatform extends VlessPlatform {
   }
 
   Future<void> _pollStats() async {
-    if (_process == null || _apiPort == 0) {
+    final xray = _xrayPath;
+    if (_process == null || _apiPort == 0 || xray == null) {
       return;
     }
     try {
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
-      final request =
-          await client
-              .getUrl(Uri.parse('http://127.0.0.1:$_apiPort/stats/outbound?reset=true'))
-              .timeout(const Duration(seconds: 2));
-      final response = await request.close().timeout(const Duration(seconds: 2));
-      final body = await response.transform(utf8.decoder).join();
-      client.close(force: true);
+      // Xray's StatsService is gRPC-only; a plain HTTP GET to the api door is
+      // answered with a framed protobuf (or, on balancer configs, tunnelled
+      // away entirely), so the stats are read through the bundled core's own
+      // `xray api statsquery` client. Counters are cumulative; speed is the
+      // delta between consecutive polls.
+      final result = await Process.run(
+        xray,
+        [
+          'api',
+          'statsquery',
+          '--server=127.0.0.1:$_apiPort',
+          '-pattern',
+          '>>>traffic>>>',
+        ],
+      ).timeout(const Duration(seconds: 2));
+      if (result.exitCode != 0) {
+        return;
+      }
+      final body = (result.stdout as String? ?? '').trim();
 
       final json = jsonDecode(body) as Map<String, dynamic>;
       var upload = 0;
@@ -552,6 +582,12 @@ class LinuxVlessPlatform extends VlessPlatform {
         if (stat is Map) {
           final name = stat['name']?.toString() ?? '';
           final value = (stat['value'] as num?)?.toInt() ?? 0;
+          // Only the outbound counters describe tunnel traffic. Inbound
+          // counters mirror the same bytes and would double the total, and
+          // user counters are not used by the app.
+          if (!name.startsWith('outbound>>>')) {
+            continue;
+          }
           if (name.contains('>>>traffic>>>uplink')) {
             upload += value;
           } else if (name.contains('>>>traffic>>>downlink')) {

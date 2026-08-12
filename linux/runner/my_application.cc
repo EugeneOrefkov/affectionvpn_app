@@ -24,6 +24,7 @@ struct _MyApplication {
   gchar* menu_current_server;
   GPtrArray* menu_server_names;
   gint menu_selected_index;
+  gboolean menu_rebuilding;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -79,6 +80,13 @@ static void tray_toggle_connection(G_GNUC_UNUSED GtkWidget* widget,
 
 static void tray_select_server(GtkWidget* widget, gpointer user_data) {
   MyApplication* self = MY_APPLICATION(user_data);
+  if (self->menu_rebuilding) {
+    // Gtk radio items emit a spurious "activate" while the server submenu is
+    // being rebuilt (the first item of a new radio group is auto-activated).
+    // That echo must not flow back to Dart, otherwise every UI selection is
+    // instantly reverted to the first server.
+    return;
+  }
   gint index =
       GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "server-index"));
   g_autoptr(FlValue) args = fl_value_new_map();
@@ -92,6 +100,7 @@ static void tray_refresh_subscription(G_GNUC_UNUSED GtkWidget* widget,
 }
 
 static void rebuild_tray_menu(MyApplication* self) {
+  self->menu_rebuilding = TRUE;
   if (self->tray_menu == nullptr) {
     self->tray_menu = gtk_menu_new();
   }
@@ -199,6 +208,7 @@ static void rebuild_tray_menu(MyApplication* self) {
     app_indicator_set_secondary_activate_target(self->tray_indicator,
                                                 self->tray_open_item);
   }
+  self->menu_rebuilding = FALSE;
 }
 
 static void apply_menu_state(MyApplication* self, FlValue* args) {
