@@ -37,7 +37,7 @@ class AppState extends ChangeNotifier {
       if (results.contains(ConnectivityResult.none)) {
         return;
       }
-      unawaited(_measureDelays(method: 'tcp', force: true));
+      unawaited(_measureDelays(method: _storage.pingMethod, force: true));
       unawaited(refreshProxyHost());
     });
   }
@@ -127,7 +127,7 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
     await VpnService.instance.initialize();
     notifyListeners();
-    unawaited(_measureDelays(method: 'tcp'));
+    unawaited(_measureDelays(method: _storage.pingMethod));
     unawaited(scheduledUpdateCheck());
     unawaited(_refreshSubscriptionOnStartup());
     _updateCheckTimer = Timer.periodic(
@@ -203,7 +203,7 @@ class AppState extends ChangeNotifier {
       _connectionStatus = ConnectionStatus.disconnected;
       await _stopIfNeeded();
       notifyListeners();
-      unawaited(_measureDelays(method: 'tcp'));
+      unawaited(_measureDelays(method: _storage.pingMethod));
     } catch (e) {
       rethrow;
     } finally {
@@ -231,7 +231,7 @@ class AppState extends ChangeNotifier {
       }
       await _storage.setServers(_servers);
       notifyListeners();
-      unawaited(_measureDelays(method: 'tcp'));
+      unawaited(_measureDelays(method: _storage.pingMethod));
     } catch (e) {
       rethrow;
     } finally {
