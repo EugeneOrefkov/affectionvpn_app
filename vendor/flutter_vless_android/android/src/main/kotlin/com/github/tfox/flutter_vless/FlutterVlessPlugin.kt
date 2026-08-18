@@ -159,7 +159,17 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
                 }
 
                 // 5. Start the XrayVPNService
-                // We pass the config and PROXY_ONLY flag via Intent extras
+                // Write the full JSON config to a file to avoid Binder transaction
+                // size limits (~1 MB) when passing large configs via Intent extras.
+                try {
+                    val configFile = java.io.File(context.filesDir, "vless_runtime_config.json")
+                    configFile.writeText(config.V2RAY_FULL_JSON_CONFIG)
+                    config.V2RAY_FULL_JSON_CONFIG = configFile.absolutePath
+                } catch (e: Exception) {
+                    result.error("CONFIG_WRITE_FAILED", "Failed to write config file: ${e.message}", null)
+                    return
+                }
+
                 val intent = Intent(context, XrayVPNService::class.java)
                 intent.putExtra("COMMAND", AppConfigs.V2RAY_SERVICE_COMMANDS.START_SERVICE)
                 intent.putExtra("V2RAY_CONFIG", config)

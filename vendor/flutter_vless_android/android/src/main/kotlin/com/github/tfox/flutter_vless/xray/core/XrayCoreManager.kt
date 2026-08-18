@@ -190,8 +190,15 @@ object XrayCoreManager {
     }
 
     internal fun buildRuntimeConfigJson(config: XrayConfig, filesDir: File): JSONObject {
+        // V2RAY_FULL_JSON_CONFIG may be a file path (written by FlutterVlessPlugin
+        // to avoid Binder transaction size limits) or an inline JSON string.
+        val rawJson = if (config.V2RAY_FULL_JSON_CONFIG.endsWith(".json")) {
+            java.io.File(config.V2RAY_FULL_JSON_CONFIG).readText()
+        } else {
+            config.V2RAY_FULL_JSON_CONFIG
+        }
         val configJson = normalizeRuntimeConfig(
-            JSONObject(config.V2RAY_FULL_JSON_CONFIG)
+            JSONObject(rawJson)
         ) as JSONObject
         normalizeVlessOutbounds(configJson)
         sanitizeLogPaths(configJson, filesDir)
