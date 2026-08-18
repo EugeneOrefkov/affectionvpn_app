@@ -51,7 +51,12 @@ object XrayCoreManager {
     fun resolveXrayExecutable(context: Context): File {
         val experimental = File(context.filesDir, "xray_core/libxray.so")
         if (experimental.exists()) {
+            // File.setExecutable silently fails on some Android devices due to
+            // SELinux restrictions; use chmod as a reliable fallback.
             experimental.setExecutable(true, false)
+            try {
+                Runtime.getRuntime().exec(arrayOf("chmod", "755", experimental.absolutePath)).waitFor()
+            } catch (_: Exception) {}
             return experimental
         }
         return File(context.applicationInfo.nativeLibraryDir, "libxray.so")

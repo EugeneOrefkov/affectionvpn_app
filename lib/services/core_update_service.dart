@@ -116,6 +116,11 @@ class CoreUpdateService {
         await soFile.delete();
       }
     }
+    // Ensure the binary is executable (File.setExecutable may silently fail on
+    // Android due to SELinux restrictions).
+    try {
+      await Process.run('chmod', ['755', '${dir.path}/libxray.so']);
+    } catch (_) {}
   }
 
   /// Linux: unpack the official Xray-linux-64.zip (xray + geoip.dat +
