@@ -676,39 +676,20 @@ class AppState extends ChangeNotifier {
       final ext = Platform.isAndroid ? '.apk' : '.tar.gz';
       final destPath = '${dir.path}/affection_vpn_update$ext';
 
-      if (isConnected) {
-        final http = _networkHttp;
-        await http.downloadFile(update.apkUrl, destPath,
-            onProgress: (received, total) {
-          if (total > 0) {
-            _downloadProgress = received / total;
-          }
-          notifyListeners();
-        });
-        if (update.sha256 != null && update.sha256!.isNotEmpty) {
-          final bytes = await File(destPath).readAsBytes();
-          final hash = sha256.convert(bytes).toString();
-          if (hash != update.sha256!.toLowerCase()) {
-            await File(destPath).delete();
-            throw Exception('Проверка целостности APK не пройдена');
-          }
-        }
-      } else {
-        // Pass the platform-correct extension into the service so the path
-        // it returns matches what the installer will look for; previously
-        // the service hard-coded `affection_vpn_update.apk` regardless of
-        // platform and `_downloadedApkPath` ended up pointing at the
-        // wrong file (typically a missing `.tar.gz` on Linux).
-        await UpdateService.instance.download(update.apkUrl,
-            onProgress: (received, total) {
-              if (total > 0) {
-                _downloadProgress = received / total;
-              }
-              notifyListeners();
-            },
-            expectedSha256: update.sha256,
-            destPath: destPath);
-      }
+      // Always use UpdateService which routes through _tunnelClient()
+      // (HTTP CONNECT proxy) — handles HTTPS, redirects, and tunnel
+      // routing correctly. The raw TunnelHttp SOCKS client doesn't
+      // support TLS or 302 redirects from GitHub release assets.
+      await UpdateService.instance.download(update.apkUrl,
+          onProgress: (received, total) {
+            if (total > 0) {
+              _downloadProgress = received / total;
+            }
+            notifyListeners();
+          },
+          expectedSha256: update.sha256,
+          destPath: destPath);
+
       _downloadedApkPath = destPath;
       _downloadProgress = 1;
     } catch (e) {
