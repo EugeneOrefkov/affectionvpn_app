@@ -388,6 +388,7 @@ class AppState extends ChangeNotifier {
     }
 
     final gen = ++_connectGeneration;
+    _statusGeneration++;
     _connectionStatus = ConnectionStatus.connecting;
     notifyListeners();
     try {
@@ -545,6 +546,10 @@ class AppState extends ChangeNotifier {
   /// Invoked from the native Linux tray "Выход" item via the shutdown bridge.
   Future<void> shutdown() => _stopIfNeeded();
 
+  /// Generation counter bumped every time [toggleConnection] fires so that
+  /// stale DISCONNECTED broadcasts from a previous connection are ignored.
+  int _statusGeneration = 0;
+
   void _onStatusChanged(VlessStatus status) {
     _status = status;
     switch (status.connectionState) {
@@ -559,6 +564,14 @@ class AppState extends ChangeNotifier {
         // arrive after a new _connect() has already set status to connecting.
         // Ignore stale broadcasts so the new connection isn't killed.
         if (_connectionStatus == ConnectionStatus.connecting) {
+          final gen = _statusGeneration;
+          Future.delayed(const Duration(seconds: 2), () {
+            if (gen == _statusGeneration &&
+                _connectionStatus == ConnectionStatus.connecting) {
+              _connectionStatus = ConnectionStatus.disconnected;
+              notifyListeners();
+            }
+          });
           return;
         }
         _connectionStatus = ConnectionStatus.disconnected;
