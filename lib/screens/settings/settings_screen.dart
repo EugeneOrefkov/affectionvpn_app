@@ -229,12 +229,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ],
                       ],
-                      const Divider(height: 1),
-                      _BypassCidrList(
-                        cidrs: state.bypassCidrs,
-                        onAdd: state.addBypassCidr,
-                        onRemove: state.removeBypassCidr,
-                      ),
+                      if (!state.proxyOnly) ...[
+                        const Divider(height: 1),
+                        _BypassCidrList(
+                          cidrs: state.bypassCidrs,
+                          onAdd: state.addBypassCidr,
+                          onRemove: state.removeBypassCidr,
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 24),
