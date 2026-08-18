@@ -217,6 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           port: state.proxyPort,
                           login: state.proxyLogin,
                           password: state.proxyPassword,
+                          showCredentials: state.proxyAuthEnabled,
                         ),
                         const Divider(height: 1),
                         _SwitchRow(
@@ -561,12 +562,14 @@ class _ProxyInfo extends StatelessWidget {
     required this.port,
     required this.login,
     required this.password,
+    this.showCredentials = true,
   });
 
   final String host;
   final int port;
   final String login;
   final String password;
+  final bool showCredentials;
 
   @override
   Widget build(BuildContext context) {
@@ -598,8 +601,10 @@ class _ProxyInfo extends StatelessWidget {
           const SizedBox(height: 12),
           _ProxyValueRow(label: 'Адрес', value: host, copyable: true),
           _ProxyValueRow(label: 'Порт', value: '$port', copyable: true),
-          _ProxyValueRow(label: 'Логин', value: login, copyable: true),
-          _ProxyValueRow(label: 'Пароль', value: password, copyable: true),
+          if (showCredentials) ...[
+            _ProxyValueRow(label: 'Логин', value: login, copyable: true),
+            _ProxyValueRow(label: 'Пароль', value: password, copyable: true),
+          ],
         ],
       ),
     );
