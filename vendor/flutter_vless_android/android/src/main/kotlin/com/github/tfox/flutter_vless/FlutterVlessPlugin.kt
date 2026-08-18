@@ -62,6 +62,7 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
     private val coreLogLines = ArrayList<String>()
     private var coreLogSink: EventChannel.EventSink? = null
     private var coreLogReceiver: BroadcastReceiver? = null
+    private var appTrafficMonitor: AppTrafficMonitor? = null
 
     companion object {
         private const val REQUEST_CODE_VPN_PERMISSION = 24
@@ -282,6 +283,12 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
                     result.success(true)
                 }
             }
+            "getAppTrafficStats" -> {
+                val monitor = appTrafficMonitor ?: AppTrafficMonitor(context).also {
+                    appTrafficMonitor = it
+                }
+                result.success(monitor.getTrafficStats())
+            }
             else -> result.notImplemented()
         }
     }
@@ -384,6 +391,7 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
         vpnStatusEvent.setStreamHandler(null)
         coreLogEvent.setStreamHandler(null)
         unregisterCoreLogReceiver()
+        appTrafficMonitor?.dispose()
         executor.shutdown()
     }
 
