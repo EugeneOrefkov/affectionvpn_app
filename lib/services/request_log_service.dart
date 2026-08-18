@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 enum RequestLogKind {
@@ -15,7 +17,7 @@ enum RequestLogKind {
 }
 
 class RequestLogEntry {
-  const RequestLogEntry({
+  RequestLogEntry({
     required this.time,
     required this.kind,
     required this.target,
@@ -45,6 +47,12 @@ class RequestLogEntry {
 
   /// Resolved Android package name when the domain maps to a known app.
   final String? appPackage;
+
+  /// Reverse-DNS hostname when [target] is a bare IP address.
+  String? dnsName;
+
+  /// Base64-decoded app icon bytes (WebP), null until fetched.
+  Uint8List? appIcon;
 }
 
 /// Collects request logging: the app's own requests (through [TunnelHttp])
@@ -66,12 +74,16 @@ class RequestLogService extends ChangeNotifier {
 
   static const _maxEntries = 500;
   static const _tailInterval = Duration(seconds: 1);
+  static const _channel = MethodChannel('flutter_vless');
 
   final List<RequestLogEntry> _entries = [];
   bool _enabled = false;
   String? _accessLogPath;
   Timer? _tailTimer;
   int _filePosition = 0;
+
+  /// Package name → cached icon bytes (avoid repeated IPC calls).
+  final Map<String, Uint8List?> _iconCache = {};
 
   bool get enabled => _enabled;
 
@@ -156,6 +168,92 @@ class RequestLogService extends ChangeNotifier {
       _entries.removeRange(0, _entries.length - _maxEntries);
     }
     notifyListeners();
+    // Enrich asynchronously: DNS lookup for IPs + app icon fetch.
+    _enrich(entry);
+  }
+
+  /// Enriches a single entry with DNS name and app icon, then notifies.
+  Future<void> _enrich(RequestLogEntry entry) async {
+    final futures = <Future<void>>[];
+
+    // DNS reverse lookup when target is a bare IP.
+    if (entry.dnsName == null && _isIp(entry.target)) {
+      futures.add(_resolveDns(entry));
+    }
+
+    // App icon fetch when package is known.
+    if (entry.appPackage != null && entry.appIcon == null) {
+      futures.add(_fetchIcon(entry));
+    }
+
+    if (futures.isEmpty) return;
+    await Future.wait(futures);
+    if (_entries.contains(entry)) {
+      notifyListeners();
+    }
+  }
+
+  static bool _isIp(String target) {
+    // Strip port if present.
+    var host = target;
+    final colon = host.lastIndexOf(':');
+    if (colon > 0 && !host.contains('://')) host = host.substring(0, colon);
+    return InternetAddress.tryParse(host) != null;
+  }
+
+  Future<void> _resolveDns(RequestLogEntry entry) async {
+    try {
+      var host = entry.target;
+      final colon = host.lastIndexOf(':');
+      if (colon > 0 && !host.contains('://')) host = host.substring(0, colon);
+      final result = await InternetAddress.lookup(host)
+          .timeout(const Duration(seconds: 2));
+      if (result.isNotEmpty && result.first.type == InternetAddressType.IPv4) {
+        // We want the hostname; lookup by IP returns the IP, so use raw lookup.
+      }
+      // Actually: reverse lookup via raw DNS.
+      final ptr = await _reverseLookup(host);
+      if (ptr != null) {
+        entry.dnsName = ptr;
+      }
+    } catch (_) {}
+  }
+
+  static Future<String?> _reverseLookup(String ip) async {
+    try {
+      final addr = await InternetAddress.lookup(ip).timeout(
+        const Duration(seconds: 2),
+      );
+      if (addr.isNotEmpty) {
+        final host = addr.first.host;
+        // Only use if it actually resolved to a different name.
+        if (host != ip) return host;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _fetchIcon(RequestLogEntry entry) async {
+    final pkg = entry.appPackage;
+    if (pkg == null) return;
+    if (_iconCache.containsKey(pkg)) {
+      entry.appIcon = _iconCache[pkg];
+      return;
+    }
+    try {
+      final b64 = await _channel.invokeMethod<String>(
+        'getAppIcon',
+        {'packageName': pkg},
+      );
+      if (b64 != null && b64.isNotEmpty) {
+        entry.appIcon = base64Decode(b64);
+        _iconCache[pkg] = entry.appIcon;
+      } else {
+        _iconCache[pkg] = null;
+      }
+    } catch (_) {
+      _iconCache[pkg] = null;
+    }
   }
 
   int _fileLength() {

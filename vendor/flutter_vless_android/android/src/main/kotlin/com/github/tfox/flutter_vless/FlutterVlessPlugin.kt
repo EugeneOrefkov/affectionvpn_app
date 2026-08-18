@@ -10,8 +10,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.net.VpnService
 import android.os.Build
+import android.util.Base64
 import androidx.core.app.ActivityCompat
 import com.github.tfox.flutter_vless.xray.core.XrayCoreManager
 import com.github.tfox.flutter_vless.xray.dto.XrayConfig
@@ -280,6 +284,35 @@ class FlutterVlessPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Activity
                     activity!!.startActivityForResult(request, REQUEST_CODE_VPN_PERMISSION)
                 } else {
                     result.success(true)
+                }
+            }
+            "getAppIcon" -> {
+                val pkg = call.argument<String>("packageName") ?: ""
+                try {
+                    val pm = context.packageManager
+                    val icon = pm.getApplicationIcon(pkg)
+                    val bmp = if (icon is BitmapDrawable) {
+                        icon.bitmap
+                    } else {
+                        val b = Bitmap.createBitmap(
+                            icon.intrinsicWidth.coerceAtLeast(1),
+                            icon.intrinsicHeight.coerceAtLeast(1),
+                            Bitmap.Config.ARGB_8888
+                        )
+                        Canvas(b).let { c ->
+                            icon.setBounds(0, 0, c.width, c.height)
+                            icon.draw(c)
+                        }
+                        b
+                    }
+                    val scaled = Bitmap.createScaledBitmap(bmp, 72, 72, true)
+                    if (scaled !== bmp) bmp.recycle()
+                    val out = java.io.ByteArrayOutputStream()
+                    scaled.compress(Bitmap.CompressFormat.WEBP_LOSSY, 75, out)
+                    scaled.recycle()
+                    result.success(Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP))
+                } catch (_: Exception) {
+                    result.success("")
                 }
             }
             else -> result.notImplemented()

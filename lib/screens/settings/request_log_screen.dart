@@ -186,19 +186,7 @@ class _LogEntryCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Icon(
-              isTunnel ? Icons.shield_outlined : Icons.link,
-              color: accent,
-              size: 16,
-            ),
-          ),
+          _EntryIcon(entry: entry, accent: accent, isTunnel: isTunnel),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -212,6 +200,16 @@ class _LogEntryCard extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (entry.dnsName != null) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    entry.dnsName!,
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 3),
                 Row(
                   children: [
@@ -277,6 +275,60 @@ class _LogEntryCard extends StatelessWidget {
   String _formatTime(DateTime time) {
     String two(int v) => v.toString().padLeft(2, '0');
     return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
+  }
+}
+
+class _EntryIcon extends StatelessWidget {
+  const _EntryIcon({
+    required this.entry,
+    required this.accent,
+    required this.isTunnel,
+  });
+
+  final RequestLogEntry entry;
+  final Color accent;
+  final bool isTunnel;
+
+  @override
+  Widget build(BuildContext context) {
+    if (entry.appIcon != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(9),
+        child: Image.memory(
+          entry.appIcon!,
+          width: 32,
+          height: 32,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => _FallbackIcon(accent: accent, isTunnel: isTunnel),
+        ),
+      );
+    }
+    return _FallbackIcon(accent: accent, isTunnel: isTunnel);
+  }
+}
+
+class _FallbackIcon extends StatelessWidget {
+  const _FallbackIcon({required this.accent, required this.isTunnel});
+
+  final Color accent;
+  final bool isTunnel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Icon(
+        isTunnel ? Icons.shield_outlined : Icons.link,
+        color: accent,
+        size: 16,
+      ),
+    );
   }
 }
 
