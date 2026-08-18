@@ -86,7 +86,7 @@ class CoreUpdateService {
     }
 
     final dir = Directory(
-      '${(await getApplicationDocumentsDirectory()).path}/xray_core',
+      '${(await getApplicationSupportDirectory()).path}/xray_core',
     );
     await dir.create(recursive: true);
 
@@ -159,7 +159,7 @@ class CoreUpdateService {
 
   Future<void> reset() async {
     final dir = Directory(
-      '${(await getApplicationDocumentsDirectory()).path}/xray_core',
+      '${(await getApplicationSupportDirectory()).path}/xray_core',
     );
     if (dir.existsSync()) {
       await dir.delete(recursive: true);
@@ -168,7 +168,7 @@ class CoreUpdateService {
 
   Future<String?> installedVersion() async {
     final dir = Directory(
-      '${(await getApplicationDocumentsDirectory()).path}/xray_core',
+      '${(await getApplicationSupportDirectory()).path}/xray_core',
     );
     final marker = File('${dir.path}/version');
     if (!marker.existsSync()) {
