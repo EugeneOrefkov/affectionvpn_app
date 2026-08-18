@@ -22,6 +22,8 @@ class StorageService {
   static const _kShowIp = 'show_ip';
   static const _kRequestLog = 'request_log_enabled';
   static const _kAutoRefreshSubscription = 'auto_refresh_subscription';
+  static const _kProxyAuthEnabled = 'proxy_auth_enabled';
+  static const _kBypassCidrs = 'bypass_cidrs';
 
   late SharedPreferences _prefs;
 
@@ -72,6 +74,27 @@ class StorageService {
 
   Future<void> setProxyOnly(bool value) async {
     await _prefs.setBool(_kProxyOnly, value);
+  }
+
+  bool get proxyAuthEnabled => _prefs.getBool(_kProxyAuthEnabled) ?? true;
+
+  Future<void> setProxyAuthEnabled(bool value) async {
+    await _prefs.setBool(_kProxyAuthEnabled, value);
+  }
+
+  List<String> get bypassCidrs {
+    final raw = _prefs.getString(_kBypassCidrs);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list.whereType<String>().toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> setBypassCidrs(List<String> value) async {
+    await _prefs.setString(_kBypassCidrs, jsonEncode(value));
   }
 
   bool get autoConnect => _prefs.getBool(_kAutoConnect) ?? false;

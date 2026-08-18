@@ -274,6 +274,58 @@ class ServerConfig {
     return '${preferred}_$index';
   }
 
+  /// Injects xray routing rules so traffic matching [cidrs] goes directly
+  /// (freedom) instead of through the proxy. A `freedom` outbound tagged
+  /// `"direct"` is ensured to exist. Rules are inserted at the beginning of
+  /// the routing array so the platform-prepended API rule stays first.
+  static String injectBypassRules(String config, List<String> cidrs) {
+    if (cidrs.isEmpty) return config;
+    try {
+      final map = jsonDecode(config) as Map<String, dynamic>;
+
+      // Ensure a freedom outbound exists.
+      final outbounds = (map['outbounds'] as List?) ?? [];
+      final hasDirect = outbounds.any((o) =>
+          o is Map && o['tag'] == 'direct' && o['protocol'] == 'freedom');
+      if (!hasDirect) {
+        outbounds.add({
+          'tag': 'direct',
+          'protocol': 'freedom',
+          'settings': {},
+        });
+        map['outbounds'] = outbounds;
+      }
+
+      // Ensure routing section and rules array exist.
+      var routing = map['routing'];
+      if (routing is! Map) {
+        routing = <String, dynamic>{};
+        map['routing'] = routing;
+      }
+      final rules = (routing['rules'] as List?) ?? [];
+      final rulesList = List<Map<String, dynamic>>.from(
+        rules.whereType<Map<String, dynamic>>(),
+      );
+
+      // Deduplicate: remove any previous app-injected bypass rule.
+      rulesList.removeWhere((r) => r['_appBypass'] == true);
+
+      // Insert at position 0 — the platform will prepend the API rule before
+      // it, so the final order is: API → bypass → everything else.
+      rulesList.insert(0, {
+        '_appBypass': true,
+        'type': 'field',
+        'ip': cidrs,
+        'outboundTag': 'direct',
+      });
+
+      routing['rules'] = rulesList;
+      return jsonEncode(map);
+    } catch (_) {
+      return config;
+    }
+  }
+
   String get countryCode {
     final letters = <String>[];
     for (final rune in remark.runes) {

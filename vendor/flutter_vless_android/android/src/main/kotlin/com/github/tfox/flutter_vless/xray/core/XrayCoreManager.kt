@@ -288,7 +288,7 @@ object XrayCoreManager {
         apiRule.put("type", "field")
         apiRule.put("inboundTag", JSONArray().put(apiInboundTag))
         apiRule.put("outboundTag", "api")
-        rules.put(apiRule)
+        rules.put(0, apiRule)
         routing.put("rules", rules)
         configJson.put("routing", routing)
 
@@ -565,10 +565,14 @@ object XrayCoreManager {
                     val name = stat.optString("name")
                     val value = stat.optLong("value")
 
-                    if (name == "outbound>>>proxy>>>traffic>>>uplink") {
-                        proxyUplink = value
-                    } else if (name == "outbound>>>proxy>>>traffic>>>downlink") {
-                        proxyDownlink = value
+                    // Sum all outbound traffic counters (proxy, proxy-2,
+                    // proxy-3, …). Balancer configs spread traffic across
+                    // multiple outbounds, so only matching the literal "proxy"
+                    // tag misses traffic routed to the other members.
+                    if (name.contains("outbound>>>") && name.contains(">>>traffic>>>uplink")) {
+                        proxyUplink += value
+                    } else if (name.contains("outbound>>>") && name.contains(">>>traffic>>>downlink")) {
+                        proxyDownlink += value
                     }
                 }
 

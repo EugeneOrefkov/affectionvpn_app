@@ -87,6 +87,55 @@ void main() {
     expect(http['port'], 10812);
   });
 
+  test('buildNoAuthProxyConfig adds no-auth SOCKS5 inbound', () {
+    const baseConfig =
+        '{"inbounds":[{"tag":"in","port":10807,"protocol":"socks"}],'
+        '"outbounds":[{"tag":"proxy","protocol":"freedom","settings":{}}]}';
+
+    final result = VpnService.instance.buildNoAuthProxyConfig(baseConfig);
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final inbounds = (map['inbounds'] as List).cast<Map<String, dynamic>>();
+    final socks = inbounds.lastWhere((e) => e['tag'] == 'socks-auth');
+
+    expect(socks['listen'], '0.0.0.0');
+    expect(socks['port'], VpnService.proxyPort);
+    expect(socks['protocol'], 'socks');
+    final settings = socks['settings'] as Map<String, dynamic>;
+    expect(settings['auth'], 'noauth');
+    expect(settings.containsKey('accounts'), isFalse);
+  });
+
+  test('buildNoAuthProxyConfig adds no-auth HTTP inbound', () {
+    const baseConfig = '{"inbounds":[],"outbounds":[]}';
+
+    final result = VpnService.instance.buildNoAuthProxyConfig(baseConfig);
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final inbounds = (map['inbounds'] as List).cast<Map<String, dynamic>>();
+    final http = inbounds.lastWhere((e) => e['tag'] == 'http-auth');
+
+    expect(http['listen'], '127.0.0.1');
+    expect(http['port'], VpnService.authHttpPort);
+    expect(http['protocol'], 'http');
+    expect(http.containsKey('settings'), isFalse);
+  });
+
+  test('buildNoAuthProxyConfig picks free ports avoiding collisions', () {
+    const baseConfig =
+        '{"inbounds":[{"port":10810,"protocol":"socks"},{"port":10811,"protocol":"http"}],"outbounds":[]}';
+
+    final result = VpnService.instance.buildNoAuthProxyConfig(baseConfig);
+
+    final map = jsonDecode(result) as Map<String, dynamic>;
+    final inbounds = (map['inbounds'] as List).cast<Map<String, dynamic>>();
+    final socks = inbounds.lastWhere((e) => e['tag'] == 'socks-auth');
+    final http = inbounds.lastWhere((e) => e['tag'] == 'http-auth');
+
+    expect(socks['port'], 10812);
+    expect(http['port'], 10813);
+  });
+
   test('buildInternalSocksConfig points the core access log for the request log',
       () {
     const baseConfig = '{"inbounds":[],"outbounds":[]}';

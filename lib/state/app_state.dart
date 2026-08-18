@@ -55,6 +55,7 @@ class AppState extends ChangeNotifier {
   VlessStatus _status = VlessStatus();
   bool _isLoadingSubscription = false;
   bool _isMeasuringDelay = false;
+  int _connectGeneration = 0;
 
   int? _measuringIndex;
   bool _initialized = false;
@@ -87,6 +88,8 @@ class AppState extends ChangeNotifier {
   String get currentVersion => _currentVersion ?? '1.0.0';
 
   bool get proxyOnly => _storage.proxyOnly;
+  bool get proxyAuthEnabled => _storage.proxyAuthEnabled;
+  List<String> get bypassCidrs => _storage.bypassCidrs;
   bool get autoConnect => _storage.autoConnect;
   String get pingMethod => _storage.pingMethod;
 
@@ -178,8 +181,10 @@ class AppState extends ChangeNotifier {
     }
     try {
       await checkForUpdates();
-    } catch (_) {}
-    await _storage.setLastUpdateCheck(DateTime.now());
+      await _storage.setLastUpdateCheck(DateTime.now());
+    } catch (_) {
+      // Don't stamp on failure so the next check (timer or manual) can retry.
+    }
   }
 
   Future<void> addSubscription(String url) async {
@@ -362,23 +367,33 @@ class AppState extends ChangeNotifier {
     }
 
     var config = server.runtimeConfig;
+    final cidrs = _storage.bypassCidrs;
+    if (cidrs.isNotEmpty) {
+      config = ServerConfig.injectBypassRules(config, cidrs);
+    }
     if (proxyOnly) {
-      await _ensureProxyCredentials();
       await refreshProxyHost();
-      config = vpn.buildAuthProxyConfig(
-        config,
-        _storage.proxyLogin,
-        _storage.proxyPassword,
-      );
+      if (_storage.proxyAuthEnabled) {
+        await _ensureProxyCredentials();
+        config = vpn.buildAuthProxyConfig(
+          config,
+          _storage.proxyLogin,
+          _storage.proxyPassword,
+        );
+      } else {
+        config = vpn.buildNoAuthProxyConfig(config);
+      }
     } else {
       config = vpn.buildInternalSocksConfig(config);
     }
 
+    final gen = ++_connectGeneration;
     _connectionStatus = ConnectionStatus.connecting;
     notifyListeners();
     try {
       await vpn.start(server, proxyOnly: proxyOnly, config: config);
     } catch (e) {
+      if (gen != _connectGeneration) return;
       _connectionStatus = ConnectionStatus.disconnected;
       notifyListeners();
       // Surface the actual reason instead of leaving the user staring at a
@@ -414,8 +429,8 @@ class AppState extends ChangeNotifier {
       return TunnelHttp(
         host: '127.0.0.1',
         port: VpnService.proxyPort,
-        username: _storage.proxyLogin,
-        password: _storage.proxyPassword,
+        username: proxyAuthEnabled ? _storage.proxyLogin : null,
+        password: proxyAuthEnabled ? _storage.proxyPassword : null,
       );
     }
     return TunnelHttp(
@@ -438,8 +453,8 @@ class AppState extends ChangeNotifier {
       return (
         host: '127.0.0.1',
         port: VpnService.instance.lastAuthHttpPort ?? VpnService.authHttpPort,
-        username: _storage.proxyLogin,
-        password: _storage.proxyPassword,
+        username: proxyAuthEnabled ? _storage.proxyLogin : null,
+        password: proxyAuthEnabled ? _storage.proxyPassword : null,
       );
     }
     return (
@@ -540,6 +555,12 @@ class AppState extends ChangeNotifier {
       case VlessConnectionState.disconnected:
       case VlessConnectionState.disconnecting:
       case VlessConnectionState.unknown:
+        // On Android, stopCore() fires a DISCONNECTED broadcast that can
+        // arrive after a new _connect() has already set status to connecting.
+        // Ignore stale broadcasts so the new connection isn't killed.
+        if (_connectionStatus == ConnectionStatus.connecting) {
+          return;
+        }
         _connectionStatus = ConnectionStatus.disconnected;
     }
     notifyListeners();
@@ -548,6 +569,28 @@ class AppState extends ChangeNotifier {
   Future<void> setProxyOnly(bool value) async {
     await _storage.setProxyOnly(value);
     notifyListeners();
+  }
+
+  Future<void> setProxyAuthEnabled(bool value) async {
+    await _storage.setProxyAuthEnabled(value);
+    notifyListeners();
+  }
+
+  Future<void> addBypassCidr(String cidr) async {
+    final list = List<String>.from(_storage.bypassCidrs);
+    if (!list.contains(cidr)) {
+      list.add(cidr);
+      await _storage.setBypassCidrs(list);
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeBypassCidr(String cidr) async {
+    final list = List<String>.from(_storage.bypassCidrs);
+    if (list.remove(cidr)) {
+      await _storage.setBypassCidrs(list);
+      notifyListeners();
+    }
   }
 
   Future<void> setAutoConnect(bool value) async {

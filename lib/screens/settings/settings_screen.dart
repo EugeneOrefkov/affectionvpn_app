@@ -212,13 +212,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       if (state.proxyOnly) ...[
                         const Divider(height: 1),
-                        _ProxyInfo(
-                          host: state.proxyHost,
-                          port: state.proxyPort,
-                          login: state.proxyLogin,
-                          password: state.proxyPassword,
+                        _SwitchRow(
+                          icon: Icons.lock_outline,
+                          title: 'Авторизация прокси',
+                          subtitle: 'Требовать логин и пароль для подключения',
+                          value: state.proxyAuthEnabled,
+                          onChanged: state.setProxyAuthEnabled,
                         ),
+                        if (state.proxyAuthEnabled) ...[
+                          const Divider(height: 1),
+                          _ProxyInfo(
+                            host: state.proxyHost,
+                            port: state.proxyPort,
+                            login: state.proxyLogin,
+                            password: state.proxyPassword,
+                          ),
+                        ],
                       ],
+                      const Divider(height: 1),
+                      _BypassCidrList(
+                        cidrs: state.bypassCidrs,
+                        onAdd: state.addBypassCidr,
+                        onRemove: state.removeBypassCidr,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -648,6 +664,221 @@ class _ProxyValueRow extends StatelessWidget {
                 size: 16,
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BypassCidrList extends StatefulWidget {
+  const _BypassCidrList({
+    required this.cidrs,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final List<String> cidrs;
+  final Future<void> Function(String cidr) onAdd;
+  final Future<void> Function(String cidr) onRemove;
+
+  @override
+  State<_BypassCidrList> createState() => _BypassCidrListState();
+}
+
+class _BypassCidrListState extends State<_BypassCidrList> {
+  final _controller = TextEditingController();
+  static const _presets = [
+    '10.0.0.0/8',
+    '172.16.0.0/12',
+    '192.168.0.0/16',
+  ];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _add(String cidr) async {
+    final trimmed = cidr.trim();
+    if (trimmed.isEmpty) return;
+    if (!_validCidr(trimmed)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Неверный CIDR. Пример: 192.168.0.0/16'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      return;
+    }
+    await widget.onAdd(trimmed);
+    _controller.clear();
+  }
+
+  static final _cidrRe = RegExp(
+    r'^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$',
+  );
+
+  bool _validCidr(String s) {
+    if (!_cidrRe.hasMatch(s)) return false;
+    final parts = s.split('/');
+    final prefix = int.tryParse(parts[1]);
+    if (prefix == null || prefix < 0 || prefix > 32) return false;
+    return parts[0].split('.').every((p) {
+      final n = int.tryParse(p);
+      return n != null && n >= 0 && n <= 255;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final presets = _presets
+        .where((p) => !widget.cidrs.contains(p))
+        .toList();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.route_outlined,
+                color: AppColors.accent,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Обход туннеля',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Подсети, которые идут напрямую, минуя прокси',
+            style: TextStyle(
+              color: AppColors.textTertiary,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '192.168.0.0/16',
+                    hintStyle: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 13,
+                    ),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(
+                        color: AppColors.border,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(
+                        color: AppColors.border,
+                      ),
+                    ),
+                  ),
+                  onSubmitted: _add,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _add(_controller.text),
+                icon: const Icon(
+                  Icons.add,
+                  color: AppColors.accent,
+                  size: 20,
+                ),
+              ),
+            ],
+          ),
+          if (presets.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final p in presets)
+                  ActionChip(
+                    label: Text(
+                      p,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                    backgroundColor: AppColors.card,
+                    side: const BorderSide(color: AppColors.border),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _add(p),
+                  ),
+              ],
+            ),
+          ],
+          if (widget.cidrs.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final cidr in widget.cidrs)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.circle,
+                      color: AppColors.accent,
+                      size: 6,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        cidr,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => widget.onRemove(cidr),
+                      icon: const Icon(
+                        Icons.close,
+                        color: AppColors.textTertiary,
+                        size: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ],
       ),
     );

@@ -236,6 +236,55 @@ class VpnService {
     return jsonEncode(_ensureAccessLog(map));
   }
 
+  /// Injects no-auth SOCKS5 and HTTP (CONNECT) inbounds on 0.0.0.0 / 127.0.0.1
+  /// for proxy-only mode without login/password authentication.
+  String buildNoAuthProxyConfig(String config) {
+    final map = jsonDecode(config) as Map<String, dynamic>;
+    final inbounds = <Map<String, dynamic>>[];
+    final usedPorts = <int>{};
+    for (final item in (map['inbounds'] as List? ?? const [])) {
+      if (item is Map) {
+        inbounds.add(Map<String, dynamic>.from(item));
+        final port = item['port'];
+        if (port is int) {
+          usedPorts.add(port);
+        }
+      }
+    }
+    var socksPort = proxyPort;
+    while (usedPorts.contains(socksPort)) {
+      socksPort++;
+    }
+    usedPorts.add(socksPort);
+    inbounds.add({
+      'tag': 'socks-auth',
+      'port': socksPort,
+      'listen': '0.0.0.0',
+      'protocol': 'socks',
+      'settings': {'auth': 'noauth', 'udp': true},
+      'sniffing': {
+        'enabled': true,
+        'destOverride': ['http', 'tls'],
+      },
+    });
+
+    var httpPort = authHttpPort;
+    while (usedPorts.contains(httpPort)) {
+      httpPort++;
+    }
+    usedPorts.add(httpPort);
+    lastAuthHttpPort = httpPort;
+    inbounds.add({
+      'tag': 'http-auth',
+      'port': httpPort,
+      'listen': '127.0.0.1',
+      'protocol': 'http',
+    });
+
+    map['inbounds'] = inbounds;
+    return jsonEncode(_ensureAccessLog(map));
+  }
+
   Future<int?> measureTcpDelay(String address, int port) async {
     final stopwatch = Stopwatch()..start();
     // startConnect returns a cancellable ConnectionTask, so a probe that hits

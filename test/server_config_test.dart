@@ -520,4 +520,74 @@ void main() {
       expect(ServerConfig.prepareRuntimeConfig('not json'), 'not json');
     });
   });
+
+  group('injectBypassRules', () {
+    test('returns config unchanged when cidrs is empty', () {
+      const config = '{"inbounds":[],"outbounds":[],"routing":{"rules":[]}}';
+      expect(ServerConfig.injectBypassRules(config, []), config);
+    });
+
+    test('injects bypass rule at position 0', () {
+      const config =
+          '{"inbounds":[],"outbounds":[{"tag":"direct","protocol":"freedom","settings":{}}],"routing":{"rules":[{"type":"field","inboundTag":["in"],"outboundTag":"proxy"}]}}';
+
+      final result =
+          ServerConfig.injectBypassRules(config, ['192.168.0.0/16']);
+      final map = jsonDecode(result) as Map<String, dynamic>;
+      final rules =
+          (map['routing']['rules'] as List).cast<Map<String, dynamic>>();
+
+      expect(rules.first['type'], 'field');
+      expect(rules.first['ip'], ['192.168.0.0/16']);
+      expect(rules.first['outboundTag'], 'direct');
+      expect(rules.first['_appBypass'], true);
+    });
+
+    test('ensures freedom outbound exists', () {
+      const config =
+          '{"inbounds":[],"outbounds":[{"tag":"proxy","protocol":"vless","settings":{}}],"routing":{"rules":[]}}';
+
+      final result =
+          ServerConfig.injectBypassRules(config, ['10.0.0.0/8']);
+      final map = jsonDecode(result) as Map<String, dynamic>;
+      final outbounds =
+          (map['outbounds'] as List).cast<Map<String, dynamic>>();
+
+      final direct = outbounds.firstWhere((o) => o['tag'] == 'direct');
+      expect(direct['protocol'], 'freedom');
+    });
+
+    test('creates routing section if missing', () {
+      const config = '{"inbounds":[],"outbounds":[]}';
+
+      final result =
+          ServerConfig.injectBypassRules(config, ['172.16.0.0/12']);
+      final map = jsonDecode(result) as Map<String, dynamic>;
+      final rules =
+          (map['routing']['rules'] as List).cast<Map<String, dynamic>>();
+
+      expect(rules.first['ip'], ['172.16.0.0/12']);
+    });
+
+    test('handles malformed JSON gracefully', () {
+      expect(ServerConfig.injectBypassRules('not json', ['10.0.0.0/8']),
+          'not json');
+    });
+
+    test('deduplicates previous bypass rules', () {
+      const config =
+          '{"inbounds":[],"outbounds":[{"tag":"direct","protocol":"freedom","settings":{}}],'
+          '"routing":{"rules":[{"_appBypass":true,"type":"field","ip":["1.1.1.0/24"],"outboundTag":"direct"}]}}';
+
+      final result =
+          ServerConfig.injectBypassRules(config, ['10.0.0.0/8']);
+      final map = jsonDecode(result) as Map<String, dynamic>;
+      final rules =
+          (map['routing']['rules'] as List).cast<Map<String, dynamic>>();
+
+      // Old rule removed, new rule added
+      expect(rules.length, 1);
+      expect(rules.first['ip'], ['10.0.0.0/8']);
+    });
+  });
 }
