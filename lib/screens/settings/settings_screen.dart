@@ -835,7 +835,7 @@ class _BypassCidrListState extends State<_BypassCidrList> {
                         fontSize: 11,
                       ),
                     ),
-                    backgroundColor: AppColors.card,
+                    backgroundColor: AppColors.surface,
                     side: const BorderSide(color: AppColors.border),
                     visualDensity: VisualDensity.compact,
                     onPressed: () => _add(p),
