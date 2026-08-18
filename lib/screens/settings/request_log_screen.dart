@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
-import '../../services/app_traffic_service.dart';
 import '../../services/request_log_service.dart';
 
 enum _LogFilter { all, app, tunnel }
@@ -18,26 +17,11 @@ class _RequestLogScreenState extends State<RequestLogScreen> {
   _LogFilter _filter = _LogFilter.all;
 
   @override
-  void initState() {
-    super.initState();
-    AppTrafficService.instance.start();
-  }
-
-  @override
-  void dispose() {
-    AppTrafficService.instance.stop();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: ListenableBuilder(
-          listenable: Listenable.merge([
-            RequestLogService.instance,
-            AppTrafficService.instance,
-          ]),
+          listenable: RequestLogService.instance,
           builder: (context, _) {
             final entries = RequestLogService.instance.entries.where(
               (e) => switch (_filter) {
@@ -46,8 +30,6 @@ class _RequestLogScreenState extends State<RequestLogScreen> {
                 _LogFilter.tunnel => e.kind == RequestLogKind.tunnel,
               },
             ).toList();
-
-            final activeApps = AppTrafficService.instance.activeApps;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,34 +70,8 @@ class _RequestLogScreenState extends State<RequestLogScreen> {
                     ],
                   ),
                 ),
-                if (activeApps.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-                    child: Text(
-                      'Активные приложения',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    height: 68,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: activeApps.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 12),
-                      itemBuilder: (context, index) {
-                        final app = activeApps[index];
-                        return _AppTrafficChip(app: app);
-                      },
-                    ),
-                  ),
-                ],
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                   child: Row(
                     children: [
                       _FilterChip(
@@ -201,62 +157,6 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _AppTrafficChip extends StatelessWidget {
-  const _AppTrafficChip({required this.app});
-
-  final AppTrafficInfo app;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceAlt,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: app.iconBytes != null
-              ? Image.memory(app.iconBytes!, fit: BoxFit.cover)
-              : const Icon(
-                  Icons.apps,
-                  color: AppColors.textSecondary,
-                  size: 22,
-                ),
-        ),
-        const SizedBox(height: 4),
-        SizedBox(
-          width: 60,
-          child: Text(
-            app.label.length > 8
-                ? '${app.label.substring(0, 7)}…'
-                : app.label,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        const SizedBox(height: 1),
-        Text(
-          '${Formatters.bytes(app.rxBytes)}↓ ${Formatters.bytes(app.txBytes)}↑',
-          style: const TextStyle(
-            color: AppColors.textTertiary,
-            fontSize: 8,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _LogEntryCard extends StatelessWidget {
   const _LogEntryCard({required this.entry});
 
@@ -274,8 +174,7 @@ class _LogEntryCard extends StatelessWidget {
       if (entry.error != null) entry.error!,
     ];
 
-    final pkg =
-        isTunnel ? AppTrafficService.resolvePackage(entry.target) : null;
+    final pkg = entry.appPackage;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -287,10 +186,18 @@ class _LogEntryCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _AppIcon(
-            packageName: pkg,
-            fallbackIcon: isTunnel ? Icons.shield_outlined : Icons.link,
-            accent: accent,
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(
+              isTunnel ? Icons.shield_outlined : Icons.link,
+              color: accent,
+              size: 16,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -306,23 +213,39 @@ class _LogEntryCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  entry.via,
-                  style: const TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 11,
-                  ),
-                ),
-                if (pkg != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    _pkgLabel(pkg),
-                    style: const TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 10,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        entry.via,
+                        style: const TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                    if (pkg != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceAlt,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          RequestLogService.appLabel(pkg),
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
                 if (details.isNotEmpty) ...[
                   const SizedBox(height: 3),
                   Text(
@@ -354,70 +277,6 @@ class _LogEntryCard extends StatelessWidget {
   String _formatTime(DateTime time) {
     String two(int v) => v.toString().padLeft(2, '0');
     return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
-  }
-
-  static String _pkgLabel(String pkg) {
-    final lastDot = pkg.lastIndexOf('.');
-    final name = pkg.substring(lastDot + 1);
-    return name[0].toUpperCase() + name.substring(1);
-  }
-}
-
-class _AppIcon extends StatelessWidget {
-  const _AppIcon({
-    required this.packageName,
-    required this.fallbackIcon,
-    required this.accent,
-  });
-
-  final String? packageName;
-  final IconData fallbackIcon;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    if (packageName == null) {
-      return _FallbackIcon(icon: fallbackIcon, accent: accent);
-    }
-
-    final apps = AppTrafficService.instance.activeApps;
-    final match = apps.where((a) => a.packageName == packageName).firstOrNull;
-
-    if (match?.iconBytes == null) {
-      return _FallbackIcon(icon: fallbackIcon, accent: accent);
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(9),
-      child: Image.memory(
-        match!.iconBytes!,
-        width: 32,
-        height: 32,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        errorBuilder: (_, _, _) => _FallbackIcon(icon: fallbackIcon, accent: accent),
-      ),
-    );
-  }
-}
-
-class _FallbackIcon extends StatelessWidget {
-  const _FallbackIcon({required this.icon, required this.accent});
-
-  final IconData icon;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Icon(icon, color: accent, size: 16),
-    );
   }
 }
 
