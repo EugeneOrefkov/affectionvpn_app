@@ -189,6 +189,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const Divider(height: 1),
                       _SwitchRow(
+                        icon: Icons.language,
+                        title: 'Показывать IP на главном экране',
+                        subtitle: 'Отображать текущий IP-адрес',
+                        value: state.showIp,
+                        onChanged: state.setShowIp,
+                      ),
+                      const Divider(height: 1),
+                      _SwitchRow(
                         icon: Icons.autorenew,
                         title: 'Автоподключение',
                         subtitle: 'Подключаться при запуске приложения',
@@ -202,15 +210,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           state.setProxyOnly(mode == VpnMode.proxy);
                         },
                       ),
-                      const Divider(height: 1),
-                      _SwitchRow(
-                        icon: Icons.language,
-                        title: 'Показывать IP на главном экране',
-                        subtitle: 'Отображать текущий IP-адрес',
-                        value: state.showIp,
-                        onChanged: state.setShowIp,
-                      ),
                       if (state.proxyOnly) ...[
+                        const Divider(height: 1),
+                        _ProxyInfo(
+                          host: state.proxyHost,
+                          port: state.proxyPort,
+                          login: state.proxyLogin,
+                          password: state.proxyPassword,
+                        ),
                         const Divider(height: 1),
                         _SwitchRow(
                           icon: Icons.lock_outline,
@@ -219,15 +226,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           value: state.proxyAuthEnabled,
                           onChanged: state.setProxyAuthEnabled,
                         ),
-                        if (state.proxyAuthEnabled) ...[
-                          const Divider(height: 1),
-                          _ProxyInfo(
-                            host: state.proxyHost,
-                            port: state.proxyPort,
-                            login: state.proxyLogin,
-                            password: state.proxyPassword,
-                          ),
-                        ],
                       ],
                       if (!state.proxyOnly) ...[
                         const Divider(height: 1),
