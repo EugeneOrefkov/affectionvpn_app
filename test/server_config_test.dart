@@ -540,7 +540,6 @@ void main() {
       expect(rules.first['type'], 'field');
       expect(rules.first['ip'], ['192.168.0.0/16']);
       expect(rules.first['outboundTag'], 'direct');
-      expect(rules.first['_appBypass'], true);
     });
 
     test('ensures freedom outbound exists', () {
@@ -577,7 +576,7 @@ void main() {
     test('deduplicates previous bypass rules', () {
       const config =
           '{"inbounds":[],"outbounds":[{"tag":"direct","protocol":"freedom","settings":{}}],'
-          '"routing":{"rules":[{"_appBypass":true,"type":"field","ip":["1.1.1.0/24"],"outboundTag":"direct"}]}}';
+          '"routing":{"rules":[{"type":"field","ip":["1.1.1.0/24"],"outboundTag":"direct"}]}}';
 
       final result =
           ServerConfig.injectBypassRules(config, ['10.0.0.0/8']);

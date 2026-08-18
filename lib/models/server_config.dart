@@ -308,12 +308,19 @@ class ServerConfig {
       );
 
       // Deduplicate: remove any previous app-injected bypass rule.
-      rulesList.removeWhere((r) => r['_appBypass'] == true);
+      // Identified as a rule with "ip" array + outboundTag "direct" +
+      // no inboundTag/protocol/balancerTag (i.e. not from the upstream config).
+      rulesList.removeWhere((r) =>
+          r['type'] == 'field' &&
+          r['ip'] is List &&
+          r['outboundTag'] == 'direct' &&
+          r['inboundTag'] == null &&
+          r['protocol'] == null &&
+          r['balancerTag'] == null);
 
       // Insert at position 0 — the platform will prepend the API rule before
       // it, so the final order is: API → bypass → everything else.
       rulesList.insert(0, {
-        '_appBypass': true,
         'type': 'field',
         'ip': cidrs,
         'outboundTag': 'direct',
