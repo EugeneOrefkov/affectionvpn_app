@@ -210,8 +210,6 @@ jobs:
           fi
           DIAG+="release id: $RELEASE_ID\n"
 
-          python3 -c "import json,sys; v,tag=sys.argv[1],sys.argv[2]; json.dump({'version':v,'tag':tag,'published_at':'','changelog':'','assets':{}}, open('/tmp/manifest.json','w'))" "$V" "$TAG"
-
           # The release can be re-run, in which case its assets already exist
           # and the upload API refuses duplicates with "already_exists", so we
           # delete an existing asset with the same name before uploading.
@@ -233,15 +231,12 @@ jobs:
           upload_one() {
             local abi="$1" src="$2"
             local name="affection_vpn-$V-$abi.apk"
-            local sha size upload url
             if [ ! -f "$src" ]; then
               echo "::error::missing $src"
               gh issue create --title "Asset missing on $TAG" --body "$DIAG"
               exit 1
             fi
             delete_asset "$name"
-            sha=$(sha256sum "$src" | cut -d' ' -f1)
-            size=$(stat -c %s "$src")
             upload=$(curl -s -X POST \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Content-Type: application/octet-stream" \
@@ -253,12 +248,11 @@ jobs:
               exit 1
             fi
             echo "uploaded: $name"
-            python3 -c "import json,sys; abi,url,size,sha=sys.argv[1],sys.argv[2],int(sys.argv[3]),sys.argv[4]; d=json.load(open('/tmp/manifest.json')); d['assets'][abi]={'apk_url':url,'size':size,'sha256':sha}; json.dump(d, open('/tmp/manifest.json','w'))" "$abi" "$url" "$size" "$sha"
           }
 
           # Upload whatever split-per-abi actually produced: this Flutter
           # version builds arm64-v8a, armeabi-v7a and x86_64 but NOT 32-bit
-          # x86, so only existing APKs are uploaded and listed in latest.json.
+          # x86, so only existing APKs are uploaded.
           for apk in "$OUT"/*-release.apk; do
             [ -f "$apk" ] || continue
             base=$(basename "$apk")
@@ -271,42 +265,8 @@ jobs:
             upload_one "$abi" "$apk"
           done
 
-          REL_JSON=$(curl -s \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/releases/$RELEASE_ID")
-          python3 -c "import json,sys; d=json.load(open('/tmp/manifest.json')); rel=json.loads(sys.argv[1]); d['published_at']=rel.get('published_at') or ''; d['changelog']=rel.get('body') or ''; json.dump(d, open('/tmp/manifest.json','w'))" "$REL_JSON"
-
-          # Merge any assets already written by the Linux job (e.g. linux-x64,
-          # linux-deb) so the last job to finish doesn't clobber the other one.
-          curl -sL -o /tmp/latest-existing.json \
-            "https://github.com/$REPO/releases/download/$TAG/latest.json" || true
-          cat <<'PY' > /tmp/merge-latest.py
-          import json, os, sys
-          existing, manifest = sys.argv[1], sys.argv[2]
-          try:
-              old = json.load(open(existing))
-          except Exception:
-              old = {'assets': {}}
-          d = json.load(open(manifest))
-          d.setdefault('assets', {})
-          for k, v in old.get('assets', {}).items():
-              if k not in d['assets']:
-                  d['assets'][k] = v
-          json.dump(d, open(manifest, 'w'))
-          PY
-          python3 /tmp/merge-latest.py /tmp/latest-existing.json /tmp/manifest.json
-
-          delete_asset latest.json
-          curl -s -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-binary "@/tmp/manifest.json" \
-            "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=latest.json" \
-            -o /tmp/latest-upload.json
-          python3 -c "import json; d=json.load(open('/tmp/latest-upload.json')); assert d.get('name')=='latest.json', d"
-          echo "uploaded: latest.json"
-          cat /tmp/manifest.json
+          # latest.json is written once by the deploy-updates job after all
+          # assets exist - two parallel jobs writing it race each other.
 
   # Runs in parallel with the APK build: the Linux bundle is the slowest part
   # to produce locally, and it only needs the GitHub Release (created by the
@@ -345,7 +305,7 @@ jobs:
           flutter build linux --release --build-name="$V" 2>&1 | tee /tmp/linux-build.log
 
       - name: Build Linux .deb package
-        run: make -C linux deb
+        run: make -C linux deb VERSION="${VERSION#v}"
 
       - name: Verify bundled Xray core
         run: |
@@ -435,64 +395,11 @@ jobs:
           if [ -f "$DEB_PATH" ]; then
             upload_asset "$DEB_PATH" "$DEB" "application/vnd.debian.binary-package"
           else
-            echo "::warning::$DEB_PATH not found, skipping .deb upload"
+            echo "::error::$DEB_PATH not found - deb build failed"
+            exit 1
           fi
-
-          # 3) Update latest.json with Linux assets
-          delete_asset() {
-            local name="$1" existing
-            existing=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets?per_page=100" \
-              | python3 -c "import json,sys; a=json.load(sys.stdin); print(next((x['id'] for x in a if x['name']=='$name'), ''))" 2>/dev/null)
-            if [ -n "$existing" ]; then
-              curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
-                "https://api.github.com/repos/$REPO/releases/assets/$existing" >/dev/null
-              echo "replaced existing asset: $name"
-            fi
-          }
-          TAR_PATH="/tmp/affection-vpn-$V-linux-x64.tar.gz"
-          DEB_PATH="build/linux/x64/release/affection-vpn_${V}_amd64.deb"
-          REPO="$GITHUB_REPOSITORY"
-          # Create from scratch if latest.json hasn't been uploaded by the Android job yet.
-          curl -sL -o /tmp/latest-linux.json \
-            "https://github.com/$REPO/releases/download/$TAG/latest.json" || true
-          python3 -c "import json,sys; json.load(open(sys.argv[1]))" /tmp/latest-linux.json 2>/dev/null || \
-            echo '{"version":"'"$V"'","tag":"'"$TAG"'","assets":{}}' > /tmp/latest-linux.json
-
-          cat <<'PY' > /tmp/update-latest.py
-          import hashlib, json, os, sys
-          v, r, t = sys.argv[1], sys.argv[2], sys.argv[3]
-          d = json.load(open('/tmp/latest-linux.json'))
-          d.setdefault('assets', {})
-          as_ = d['assets']
-          tar_path = '/tmp/affection-vpn-' + v + '-linux-x64.tar.gz'
-          tar_url = 'https://github.com/' + r + '/releases/download/' + t + '/affection-vpn-' + v + '-linux-x64.tar.gz'
-          as_['linux-x64'] = {
-            'tar_url': tar_url,
-            'size': os.path.getsize(tar_path),
-            'sha256': hashlib.sha256(open(tar_path, 'rb').read()).hexdigest()
-          }
-          deb_path = 'build/linux/x64/release/affection-vpn_' + v + '_amd64.deb'
-          if os.path.exists(deb_path) and os.path.getsize(deb_path) > 0:
-            deb_url = 'https://github.com/' + r + '/releases/download/' + t + '/affection-vpn_' + v + '_amd64.deb'
-            as_['linux-deb'] = {
-              'deb_url': deb_url,
-              'size': os.path.getsize(deb_path),
-              'sha256': hashlib.sha256(open(deb_path, 'rb').read()).hexdigest()
-            }
-          json.dump(d, open('/tmp/latest-linux.json', 'w'))
-          PY
-          python3 /tmp/update-latest.py "$V" "$REPO" "$TAG"
-
-          delete_asset latest.json
-          curl -s -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-binary "@/tmp/latest-linux.json" \
-            "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=latest.json" \
-            -o /tmp/latest-upload.json
-          python3 -c "import json; d=json.load(open('/tmp/latest-upload.json')); assert d.get('name')=='latest.json', d"
-          echo "updated latest.json with Linux assets"
+          # latest.json is written once by the deploy-updates job after all
+          # assets exist - two parallel jobs writing it race each other.
 
       - name: Sync package versions with the tag
         env:
@@ -524,6 +431,9 @@ jobs:
   # Publishes release assets onto the update server. Runs on the self-hosted
   # runner living on the VPS itself: no inbound ports, no SSH keys - the job
   # simply writes files where the local nginx serves them from.
+  #
+  # This is also the ONLY job that writes latest.json (single writer): both
+  # build jobs used to update it in parallel and raced each other.
   deploy-updates:
     needs: [build, build-linux]
     runs-on: [self-hosted, vps]
@@ -531,6 +441,9 @@ jobs:
       VERSION: ${{ github.ref_name }}
       UPDATES_BASE: https://update.affectiion.ru
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -540,24 +453,29 @@ jobs:
           gh release download "$VERSION" -R "$GITHUB_REPOSITORY" -D dist --clobber
           ls -la dist
 
-      - name: Rewrite manifest URLs
+      - name: Build update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          python3 - <<'PY'
-          import json, os
-          base = os.environ['UPDATES_BASE'].rstrip('/')
-          m = json.load(open('dist/latest.json'))
-          for asset in m.get('assets', {}).values():
-              for field in ('apk_url', 'deb_url', 'tar_url'):
-                  if field in asset:
-                      name = asset[field].rsplit('/', 1)[1]
-                      asset[field] = f'{base}/{name}'
-          json.dump(m, open('dist/latest.json', 'w'))
-          print(open('dist/latest.json').read())
-          PY
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION" \
+            --jq '.published_at // ""' > /tmp/published_at
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION" \
+            --jq '.body // ""' > /tmp/changelog.md
+          python3 scripts/build_manifest.py \
+            dist "$UPDATES_BASE" "${VERSION#v}" "$VERSION" \
+            "$(cat /tmp/published_at)" /tmp/changelog.md > dist/latest.json
+          cat dist/latest.json
 
       - name: Publish to updates dir
         run: |
           set -e
           cp dist/* /opt/affectionvpn_app/updates/
           ls -la /opt/affectionvpn_app/updates/
+
+      # Old app versions still read the manifest from the GitHub release;
+      # keep a copy there until every client has moved to our server.
+      - name: Update latest.json on the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$VERSION" dist/latest.json --clobber -R "$GITHUB_REPOSITORY"

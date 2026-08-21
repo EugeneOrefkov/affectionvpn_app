@@ -13,7 +13,10 @@ ICON_DIR          ?= /usr/share/icons/hicolor/192x192/apps
 BUILD_BUNDLE      := $(ROOT)/build/linux/x64/release/bundle
 DEB_BUILD_DIR     := $(ROOT)/build/linux/x64/release/deb-pkg
 
-VERSION := $(shell grep '^version:' $(ROOT)/pubspec.yaml | sed 's/version: *//; s/+.*//' 2>/dev/null || echo "0.0.0")
+# Version source of truth: CI passes the release tag via the VERSION
+# environment variable ("make deb VERSION=1.3.6"). Local builds fall back to
+# pubspec.yaml.
+VERSION ?= $(shell grep '^version:' $(ROOT)/pubspec.yaml | sed 's/version: *//; s/+.*//' 2>/dev/null || echo "0.0.0")
 ARCH    := amd64
 
 .PHONY: all build install uninstall deb clean
