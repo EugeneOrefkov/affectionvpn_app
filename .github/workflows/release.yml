@@ -489,6 +489,14 @@ jobs:
           cp dist/* /opt/affectionvpn_app/updates/
           ls -la /opt/affectionvpn_app/updates/
 
+      - name: Smoke test the update server
+        run: |
+          set -e
+          echo "checking $UPDATES_BASE/latest.json ..."
+          curl -fsSI "$UPDATES_BASE/latest.json" | head -1
+          curl -fsS "$UPDATES_BASE/latest.json" | \
+            python3 -c "import json,sys; d=json.load(sys.stdin); assert d['version']=='${VERSION#v}', d['version']; print('manifest OK, version', d['version'])"
+
       # Old app versions still read the manifest from the GitHub release;
       # keep a copy there until every client has moved to our server.
       - name: Update latest.json on the GitHub release
