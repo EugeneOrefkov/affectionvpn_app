@@ -10,7 +10,10 @@ traffic stats.
 
 ### Android
 
-APKs are attached to each [GitHub release](https://github.com/EugeneOrefkov/affectionvpn_app/releases/latest).
+APKs are published on the update server: [update.affectiion.ru](https://update.affectiion.ru/latest.json)
+lists the current release with download URLs and checksums (this is the same
+manifest the in-app updater consumes). Direct link pattern:
+`https://update.affectiion.ru/affection_vpn-<version>-<abi>.apk`.
 The app bundles the Xray core and installs a real VPN tunnel.
 
 ### Linux
@@ -40,11 +43,11 @@ alongside.
 
 #### Other distros (Debian / Ubuntu / Fedora)
 
-Download the `.deb` package from the latest release:
+Download the `.deb` package from the update server:
 
 ```bash
-wget https://github.com/EugeneOrefkov/affectionvpn_app/releases/latest/download/affection-vpn_1.0.24_amd64.deb
-sudo dpkg -i affection-vpn_1.0.24_amd64.deb
+wget https://update.affectiion.ru/affection-vpn_<version>_amd64.deb
+sudo dpkg -i affection-vpn_<version>_amd64.deb
 ```
 
 Install Xray manually:
@@ -55,11 +58,12 @@ bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release
 
 #### Portable tarball
 
-Every release includes `affection-vpn-<version>-linux-x64.tar.gz`. Extract
-anywhere and run `./affection_vpn`:
+Every release includes `affection-vpn-<version>-linux-x64.tar.gz` on the
+update server. Extract anywhere and run `./affection_vpn`:
 
 ```bash
-tar -xzf affection-vpn-1.0.23-linux-x64.tar.gz
+wget https://update.affectiion.ru/affection-vpn-1.3.5-linux-x64.tar.gz
+tar -xzf affection-vpn-1.3.5-linux-x64.tar.gz
 cd bundle
 ./affection_vpn
 ```

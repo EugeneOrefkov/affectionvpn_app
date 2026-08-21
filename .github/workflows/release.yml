@@ -517,3 +517,58 @@ jobs:
             git commit -m "update arch PKGBUILD to v$V"
             git push origin HEAD:main
           fi
+
+  # Publishes release assets to our own update server over SSH. Once the
+  # repository is private, GitHub release assets are no longer anonymously
+  # downloadable, so clients fetch updates from here instead.
+  deploy-updates:
+    needs: [build, build-linux]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.ref_name }}
+      UPDATES_BASE: https://update.affectiion.ru
+      SSH_HOST: ${{ secrets.UPDATES_HOST }}
+      SSH_PORT: ${{ secrets.UPDATES_PORT }}
+      SSH_USER: ${{ secrets.UPDATES_USER }}
+    steps:
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir dist
+          gh release download "$VERSION" -R "$GITHUB_REPOSITORY" -D dist --clobber
+          ls -la dist
+
+      - name: Set up SSH key
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf '%s\n' '${{ secrets.UPDATES_SSH_KEY }}' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload artifacts
+        run: |
+          set -e
+          rsync -az --exclude latest.json \
+            -e "ssh -p $SSH_PORT" \
+            dist/ "$SSH_USER@$SSH_HOST:/opt/affectionvpn_app/updates/"
+
+      - name: Rewrite manifest URLs and upload
+        run: |
+          set -e
+          python3 - <<'PY'
+          import json, os
+          base = os.environ['UPDATES_BASE'].rstrip('/')
+          m = json.load(open('dist/latest.json'))
+          for asset in m.get('assets', {}).values():
+              for field in ('apk_url', 'deb_url', 'tar_url'):
+                  if field in asset:
+                      name = asset[field].rsplit('/', 1)[1]
+                      asset[field] = f'{base}/{name}'
+          json.dump(m, open('dist/latest.json', 'w'))
+          print(open('dist/latest.json').read())
+          PY
+          rsync -az -e "ssh -p $SSH_PORT" \
+            dist/latest.json "$SSH_USER@$SSH_HOST:/opt/affectionvpn_app/updates/latest.json"

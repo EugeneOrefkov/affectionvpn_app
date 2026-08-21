@@ -10,7 +10,6 @@ import 'package:http/io_client.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../core/config/app_config.dart';
 import '../core/utils/device_abi.dart';
 import '../models/update_info.dart';
 import '../state/app_state.dart';
@@ -34,16 +33,13 @@ class UpdateService {
   UpdateService._();
   static final UpdateService instance = UpdateService._();
 
-  static const _repo = '${AppConfig.githubOwner}/${AppConfig.githubRepo}';
   static const _headers = {
     'User-Agent': 'AffectionVPN/1.0 (Xray; VLESS)',
   };
 
-  /// The release manifest is served as the `latest.json` asset of the latest
-  /// GitHub release, so it is read without hitting the rate-limited GitHub
-  /// API: https://github.com/{owner}/{repo}/releases/latest/download/latest.json
-  static const _manifestUrl =
-      'https://github.com/$_repo/releases/latest/download/latest.json';
+  /// The update manifest and artifacts are served by our own update server.
+  /// Distribution must not depend on the source repository staying public.
+  static const _manifestUrl = 'https://update.affectiion.ru/latest.json';
 
   /// Client for update requests. When the app's own tunnel is active it is
   /// routed through the local HTTP inbound (which is not captured by the

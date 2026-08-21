@@ -26,7 +26,7 @@ optdepends=(
   'v2ray-domain-list-community: fresher geosite database from the system repos'
 )
 source=(
-  "affection-vpn-$pkgver-linux-x64.tar.gz::https://github.com/EugeneOrefkov/affectionvpn_app/releases/download/v$pkgver/affection-vpn-$pkgver-linux-x64.tar.gz"
+  "affection-vpn-$pkgver-linux-x64.tar.gz::https://update.affectiion.ru/affection-vpn-$pkgver-linux-x64.tar.gz"
   'affection-vpn.desktop'
   'affection-vpn.png'
 )
