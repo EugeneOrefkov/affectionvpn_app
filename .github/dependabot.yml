@@ -1,0 +1,26 @@
+# Dependabot keeps dependencies fresh: once a week it opens PRs bumping
+# outdated packages. Our CI workflow validates every such PR automatically,
+# so accepting an update is a one-click review of a green-checked PR.
+version: 2
+updates:
+  # Versions of actions used by our workflows (checkout@v4 -> v5, ...)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Dart/Flutter packages from pubspec.yaml
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
