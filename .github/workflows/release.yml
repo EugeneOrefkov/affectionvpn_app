@@ -1,25 +1,51 @@
 name: Build & Release
 
+# Releases are cut by pushing a tag: `git tag v1.3.4 && git push origin v1.3.4`.
+# The version comes from the tag name itself, so there is nothing to type and
+# no way to release a version that differs from the tag.
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'App version to release (e.g. 1.0.16)'
-        required: true
+  push:
+    tags: ['v*']
+
+concurrency:
+  # Serialize releases: two tags pushed together are released one after
+  # another. Never cancel an in-progress release - a half-published release is
+  # worse than a slow one.
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
   issues: write
 
 jobs:
-  build:
+  # Gate: the tag must point to a commit that is already on main. This blocks
+  # accidental releases from feature branches or reverted commits.
+  verify-tag:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag points to main
+        run: |
+          git fetch origin main
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "tag commit $GITHUB_SHA is on main"
+          else
+            echo "::error::tag $GITHUB_REF_NAME does not point to a commit on main - refusing to release"
+            exit 1
+          fi
+
+  build:
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    environment: release
     env:
-      # The version comes from the workflow_dispatch input. Runs on main so all
-      # GitHub caches (Flutter SDK, Gradle) are shared across runs. The bundled
-      # Xray core comes from the flutter_vless Maven Central AAR, so no native
-      # Xray build is needed here.
-      VERSION: ${{ inputs.version }}
+      # The tag name, e.g. v1.3.4. Steps below strip the leading 'v'.
+      VERSION: ${{ github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -261,9 +287,11 @@ jobs:
   # to produce locally, and it only needs the GitHub Release (created by the
   # build job) to exist before uploading, so we poll for it.
   build-linux:
+    needs: verify-tag
     runs-on: ubuntu-latest
+    environment: release
     env:
-      VERSION: ${{ inputs.version }}
+      VERSION: ${{ github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
