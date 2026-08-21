@@ -480,7 +480,7 @@ jobs:
       MIN_SUPPORTED_VERSION: '1.3.7'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download release assets
         env:
