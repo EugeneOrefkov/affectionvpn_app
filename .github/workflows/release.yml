@@ -64,7 +64,7 @@ jobs:
       - name: Test
         run: flutter test
 
-  build:
+  build-apk:
     needs: test
     runs-on: ubuntu-latest
     environment: release
@@ -270,7 +270,7 @@ jobs:
 
   # Runs in parallel with the APK build: the Linux bundle is the slowest part
   # to produce locally, and it only needs the GitHub Release (created by the
-  # build job) to exist before uploading, so we poll for it.
+  # build-apk job) to exist before uploading, so we poll for it.
   build-linux:
     needs: test
     runs-on: ubuntu-latest
@@ -440,7 +440,7 @@ jobs:
   # This is also the ONLY job that writes latest.json (single writer): both
   # build jobs used to update it in parallel and raced each other.
   deploy-updates:
-    needs: [build, build-linux]
+    needs: [build-apk, build-linux]
     runs-on: [self-hosted, vps]
     env:
       VERSION: ${{ github.ref_name }}
