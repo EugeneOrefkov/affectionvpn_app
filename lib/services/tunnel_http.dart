@@ -252,13 +252,13 @@ class TunnelHttp {
           'User-Agent: AffectionVPN/1.0\r\n'
           'Connection: close\r\n\r\n');
       final statusLine = await reader.readLine();
-      if (statusLine == null || !statusLine.contains('200')) {
-        throw Exception('HTTP ${statusLine?.split(' ')[1] ?? 'error'}');
+      if (!statusLine.contains('200')) {
+        throw Exception('HTTP error: $statusLine');
       }
       int? total;
       while (true) {
         final header = await reader.readLine();
-        if (header == null || header.isEmpty) {
+        if (header.isEmpty) {
           break;
         }
         final colon = header.indexOf(':');
