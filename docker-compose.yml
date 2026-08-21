@@ -1,19 +1,24 @@
-# Mini update-server: serves ./updates over HTTP the same way the app's
-# updater expects (latest.json + artifacts). Local test:
+# Update server: serves ./updates over HTTPS via the reverse proxy.
 #
-#   cp <release assets>/latest.json updates/
-#   docker compose up -d
-#   curl -s http://localhost:8080/latest.json
+# Network model: nginx has NO published ports - it is reachable only from
+# containers attached to the shared `updates-net` bridge (the edge reverse
+# proxy joins it and proxies to http://updates:80). Only the proxy listens
+# on 443 publicly.
 #
-# Host port is configurable per environment: create a .env file next to this
-# one (it is gitignored) with UPDATES_PORT=8090, for example. Default: 8080.
-#
-# In stage 4 this file moves to the VPS unchanged.
+# After changing this file on the server:
+#   git pull && docker compose up -d
 
 services:
   updates:
     image: nginx:alpine
-    ports:
-      - "${UPDATES_PORT:-8080}:80"
+    restart: unless-stopped
     volumes:
       - ./updates:/usr/share/nginx/html:ro
+    networks:
+      - updates-net
+
+networks:
+  updates-net:
+    # Fixed name so that containers from other compose projects (caddy)
+    # can attach to it as an external network.
+    name: updates-net
