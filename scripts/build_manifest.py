@@ -6,7 +6,7 @@ checksums, points every URL at the public update server and prints the
 manifest JSON to stdout.
 
 Usage:
-  build_manifest.py <dist-dir> <base-url> <version> <tag> <published-at> <changelog-file>
+  build_manifest.py <dist-dir> <base-url> <version> <tag> <published-at> <changelog-file> <min-supported-version>
 """
 import hashlib
 import json
@@ -14,7 +14,7 @@ import os
 import re
 import sys
 
-dist, base, version, tag, published_at, changelog_file = sys.argv[1:7]
+dist, base, version, tag, published_at, changelog_file, min_supported_version = sys.argv[1:8]
 base = base.rstrip('/')
 
 
@@ -52,6 +52,11 @@ print(json.dumps({
     'version': version,
     'tag': tag,
     'published_at': published_at,
+    'min_supported_version': min_supported_version,
+    # Reserved for a future TUF-style signed manifest. Leave null until the
+    # signing key lands - clients must ignore it as long as it is absent or
+    # null.
+    'signature': None,
     'changelog': changelog,
     'assets': assets,
 }, ensure_ascii=False))

@@ -16,7 +16,11 @@
 - [ ] Rollback plan: revert the commit (the release pipeline does not
       sign or auto-push new releases; revert = done)
 
-## Checklist
+## Reviewer checklist
 
+<!-- For the human approving this PR. -->
+- [ ] I am **not** the author of this PR
+- [ ] Code I own that this PR touches is fully reviewed (see `.github/CODEOWNERS`)
 - [ ] No secrets, tokens or keys in the diff
 - [ ] No change to `pubspec.yaml` version unless release-relevant
+- [ ] Test plan matches the actual change
