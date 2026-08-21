@@ -413,6 +413,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # Build steps leave unstaged churn behind (pub get refreshes
+          # pubspec.lock) - start from a clean checkout of current main.
+          git reset --hard
+          git fetch origin main
+          BRANCH="bot/sync-package-versions-v$V"
+          git checkout -B "$BRANCH" origin/main
+
           # The tag is the single source of truth: every packaged copy of the
           # version follows it in one housekeeping commit.
           sed -i "s/^pkgver=.*/pkgver=$V/" packaging/arch/PKGBUILD
@@ -425,17 +432,16 @@ jobs:
             echo 'package versions already up to date'
           else
             git commit -m "sync package versions to v$V"
-            # Build steps can leave unstaged churn behind (e.g. pub get
-            # refreshing pubspec.lock) - rebase refuses to run on a dirty
-            # tree, so log and drop it before replaying on main.
-            git status --short
-            git reset --hard
-            # main may have moved ahead of the tagged commit while this
-            # release was building - replay the housekeeping commit on top
-            # of it instead of failing a non-fast-forward push.
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
+            git push --force origin "$BRANCH"
+            # Even the release bot ships through a pull request: required
+            # checks validate the housekeeping commit and auto-merge lands
+            # it as soon as they are green.
+            gh pr create \
+              --title "sync package versions to v$V" \
+              --body "Automated housekeeping for $VERSION: PKGBUILD pkgver/sha256 and pubspec version follow the tag." \
+              --head "$BRANCH" \
+              --base main || echo "sync PR already exists"
+            gh pr merge --squash --auto --delete-branch
           fi
 
   # Publishes release assets onto the update server. Runs on the self-hosted
