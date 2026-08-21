@@ -46,3 +46,6 @@ app.*.map.json
 
 # Experimental Xray core builds from sources
 /build/experimental/
+
+# Per-server compose configuration (ports, secrets)
+.env
