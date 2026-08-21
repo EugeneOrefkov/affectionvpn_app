@@ -1,0 +1,16 @@
+# Mini update-server: serves ./updates over HTTP the same way the app's
+# updater expects (latest.json + artifacts). Local test:
+#
+#   cp <release assets>/latest.json updates/
+#   docker compose up -d
+#   curl -s http://localhost:8080/latest.json
+#
+# In stage 4 this file moves to the VPS unchanged.
+
+services:
+  updates:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./updates:/usr/share/nginx/html:ro

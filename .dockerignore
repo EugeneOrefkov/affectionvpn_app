@@ -1,0 +1,15 @@
+# Never send local state and platform dirs into the build context.
+.git
+.dart_tool
+.idea
+.vscode
+build
+android
+integration_test
+test
+packaging
+scripts
+vendor
+access.log
+*.md
+!README.md
