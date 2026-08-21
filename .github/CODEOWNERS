@@ -1,0 +1,4 @@
+# Default reviewer for everything: the repository owner.
+# When a second developer joins, split by directories here, e.g.:
+#   /lib/services/ @EugeneOrefkov @second-dev
+* @EugeneOrefkov
