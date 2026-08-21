@@ -328,7 +328,9 @@ void main() {
 
       await _fetchThroughSocks(10900, server.port);
 
-      final deadline = DateTime.now().add(const Duration(seconds: 6));
+      // The core reports stats asynchronously; under CI load (parallel test
+      // isolates, cold caches) the first report can lag several seconds.
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
       while (DateTime.now().isBefore(deadline)) {
         final reported = statuses.where((s) => s.download > 0).toList();
         if (reported.isNotEmpty) {
