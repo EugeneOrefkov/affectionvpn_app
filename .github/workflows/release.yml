@@ -425,6 +425,11 @@ jobs:
             echo 'package versions already up to date'
           else
             git commit -m "sync package versions to v$V"
+            # Build steps can leave unstaged churn behind (e.g. pub get
+            # refreshing pubspec.lock) - rebase refuses to run on a dirty
+            # tree, so log and drop it before replaying on main.
+            git status --short
+            git reset --hard
             # main may have moved ahead of the tagged commit while this
             # release was building - replay the housekeeping commit on top
             # of it instead of failing a non-fast-forward push.
