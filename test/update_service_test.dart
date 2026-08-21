@@ -16,6 +16,7 @@ void main() {
     Map<String, dynamic> manifest({
       String version = '2.0.0',
       Map<String, dynamic>? assets,
+      String? minSupported,
     }) {
       return {
         'version': version,
@@ -23,6 +24,7 @@ void main() {
         'published_at': '2026-08-06T10:00:00Z',
         'changelog': 'changelog line',
         'assets': assets ?? {'arm64-v8a': _asset('arm64-v8a')},
+        'min_supported_version': ?minSupported,
       };
     }
 
@@ -38,6 +40,7 @@ void main() {
       expect(info.sha256, 'a' * 64);
       expect(info.changelog, 'changelog line');
       expect(info.publishedAt, DateTime.parse('2026-08-06T10:00:00Z'));
+      expect(info.requiresManualReinstall, isFalse);
     });
 
     test('falls back to universal when the ABI asset is absent', () {
@@ -78,6 +81,37 @@ void main() {
         abi: 'arm64-v8a',
       );
       expect(info, isNull);
+    });
+
+    test('marks requiresManualReinstall when min_version is newer than', () {
+      final info = UpdateService.parseManifest(
+        manifest(minSupported: '1.1.0'),
+        currentVersion: '1.0.16',
+        abi: 'arm64-v8a',
+      );
+      expect(info, isNotNull);
+      expect(info!.requiresManualReinstall, isTrue);
+      expect(info.assetKey, 'arm64-v8a');
+    });
+
+    test('does not require reinstall when current is at/above min_version', () {
+      final info = UpdateService.parseManifest(
+        manifest(minSupported: '1.0.16'),
+        currentVersion: '1.0.16',
+        abi: 'arm64-v8a',
+      );
+      expect(info, isNotNull);
+      expect(info!.requiresManualReinstall, isFalse);
+    });
+
+    test('ignores malformed min_version', () {
+      final info = UpdateService.parseManifest(
+        manifest(minSupported: 'not-a-version'),
+        currentVersion: '1.0.16',
+        abi: 'arm64-v8a',
+      );
+      expect(info, isNotNull);
+      expect(info!.requiresManualReinstall, isFalse);
     });
   });
 

@@ -8,6 +8,7 @@ class UpdateInfo {
     this.size,
     this.sha256,
     this.assetKey,
+    this.requiresManualReinstall = false,
   });
 
   final String version;
@@ -24,4 +25,11 @@ class UpdateInfo {
   /// Which asset was picked from the manifest: an ABI key (arm64-v8a,
   /// armeabi-v7a, x86_64, x86) or "universal" as the fallback.
   final String? assetKey;
+
+  /// True when the manifest's `min_supported_version` is newer than the
+  /// running client. This happens after a breaking protocol/channel change
+  /// (e.g. moving off GitHub Releases): older clients can no longer
+  /// auto-update and must reinstall manually.
+  final bool requiresManualReinstall;
 }
+
