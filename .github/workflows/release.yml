@@ -518,44 +518,26 @@ jobs:
             git push origin HEAD:main
           fi
 
-  # Publishes release assets to our own update server over SSH. Once the
-  # repository is private, GitHub release assets are no longer anonymously
-  # downloadable, so clients fetch updates from here instead.
+  # Publishes release assets onto the update server. Runs on the self-hosted
+  # runner living on the VPS itself: no inbound ports, no SSH keys - the job
+  # simply writes files where the local nginx serves them from.
   deploy-updates:
     needs: [build, build-linux]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, vps]
     env:
       VERSION: ${{ github.ref_name }}
       UPDATES_BASE: https://update.affectiion.ru
-      SSH_HOST: ${{ secrets.UPDATES_HOST }}
-      SSH_PORT: ${{ secrets.UPDATES_PORT }}
-      SSH_USER: ${{ secrets.UPDATES_USER }}
     steps:
       - name: Download release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          mkdir dist
+          rm -rf dist && mkdir dist
           gh release download "$VERSION" -R "$GITHUB_REPOSITORY" -D dist --clobber
           ls -la dist
 
-      - name: Set up SSH key
-        run: |
-          set -e
-          mkdir -p ~/.ssh
-          printf '%s\n' '${{ secrets.UPDATES_SSH_KEY }}' > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-
-      - name: Upload artifacts
-        run: |
-          set -e
-          rsync -az --exclude latest.json \
-            -e "ssh -p $SSH_PORT" \
-            dist/ "$SSH_USER@$SSH_HOST:/opt/affectionvpn_app/updates/"
-
-      - name: Rewrite manifest URLs and upload
+      - name: Rewrite manifest URLs
         run: |
           set -e
           python3 - <<'PY'
@@ -570,5 +552,9 @@ jobs:
           json.dump(m, open('dist/latest.json', 'w'))
           print(open('dist/latest.json').read())
           PY
-          rsync -az -e "ssh -p $SSH_PORT" \
-            dist/latest.json "$SSH_USER@$SSH_HOST:/opt/affectionvpn_app/updates/latest.json"
+
+      - name: Publish to updates dir
+        run: |
+          set -e
+          cp dist/* /opt/affectionvpn_app/updates/
+          ls -la /opt/affectionvpn_app/updates/
