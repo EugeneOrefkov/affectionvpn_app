@@ -425,6 +425,11 @@ jobs:
             echo 'package versions already up to date'
           else
             git commit -m "sync package versions to v$V"
+            # main may have moved ahead of the tagged commit while this
+            # release was building - replay the housekeeping commit on top
+            # of it instead of failing a non-fast-forward push.
+            git fetch origin main
+            git rebase origin/main
             git push origin HEAD:main
           fi
 
