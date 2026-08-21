@@ -1,11 +1,21 @@
 name: Build & Release
 
-# Releases are cut by pushing a tag: `git tag v1.3.4 && git push origin v1.3.4`.
-# The version comes from the tag name itself, so there is nothing to type and
-# no way to release a version that differs from the tag.
+# Two ways in:
+#  - Tag push from `./scripts/release.sh`: full pipeline runs (build, sign,
+#    deploy), the release environment gates only the deploy step.
+#  - workflow_dispatch with an existing tag: only `deploy-updates` reruns,
+#    useful when a deploy failed but the artifacts are already on GitHub.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Existing tag to redeploy, e.g. v1.3.10'
+        required: true
+        type: string
+
+
 
 concurrency:
   # Serialize releases: two tags pushed together are released one after
@@ -20,8 +30,11 @@ permissions:
 
 jobs:
   # Gate: the tag must point to a commit that is already on main. This blocks
-  # accidental releases from feature branches or reverted commits.
+  # accidental releases from feature branches or reverted commits. Only makes
+  # sense for the tag-push path - workflow_dispatch already supplies a known
+  # tag.
   verify-tag:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -42,6 +55,7 @@ jobs:
   # Explicit quality gate: a release may only ship code that passes analyze
   # and tests, even if something landed on main bypassing CI.
   test:
+    if: github.event_name == 'push'
     needs: verify-tag
     runs-on: ubuntu-latest
     steps:
@@ -65,9 +79,9 @@ jobs:
         run: flutter test
 
   build-apk:
+    if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-latest
-    environment: release
     env:
       # The tag name, e.g. v1.3.4. Steps below strip the leading 'v'.
       VERSION: ${{ github.ref_name }}
@@ -272,9 +286,9 @@ jobs:
   # to produce locally, and it only needs the GitHub Release (created by the
   # build-apk job) to exist before uploading, so we poll for it.
   build-linux:
+    if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-latest
-    environment: release
     env:
       VERSION: ${{ github.ref_name }}
     steps:
@@ -453,9 +467,17 @@ jobs:
   deploy-updates:
     needs: [build-apk, build-linux]
     runs-on: [self-hosted, vps]
+    environment: release
     env:
-      VERSION: ${{ github.ref_name }}
+      # Tag name on push, manual input on workflow_dispatch (redeploy path).
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
       UPDATES_BASE: https://update.affectiion.ru
+      # The oldest client version allowed to self-update against this
+      # update server. Older versions still poll the GitHub Releases URL
+      # and would silently break once the repo goes private, so they must
+      # reinstall manually. Keep this conservative: bump alongside the
+      # first release that introduces a breaking client/protocol change.
+      MIN_SUPPORTED_VERSION: '1.3.7'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -480,7 +502,7 @@ jobs:
             --jq '.body // ""' > /tmp/changelog.md
           python3 scripts/build_manifest.py \
             dist "$UPDATES_BASE" "${VERSION#v}" "$VERSION" \
-            "$(cat /tmp/published_at)" /tmp/changelog.md > dist/latest.json
+            "$(cat /tmp/published_at)" /tmp/changelog.md "${MIN_SUPPORTED_VERSION}" > dist/latest.json
           cat dist/latest.json
 
       - name: Publish to updates dir
@@ -496,10 +518,3 @@ jobs:
           curl -fsSI "$UPDATES_BASE/latest.json" | head -1
           curl -fsS "$UPDATES_BASE/latest.json" | \
             python3 -c "import json,sys; d=json.load(sys.stdin); assert d['version']=='${VERSION#v}', d['version']; print('manifest OK, version', d['version'])"
-
-      # Old app versions still read the manifest from the GitHub release;
-      # keep a copy there until every client has moved to our server.
-      - name: Update latest.json on the GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$VERSION" dist/latest.json --clobber -R "$GITHUB_REPOSITORY"
