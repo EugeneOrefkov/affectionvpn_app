@@ -688,7 +688,8 @@ class AppState extends ChangeNotifier {
             notifyListeners();
           },
           expectedSha256: update.sha256,
-          destPath: destPath);
+          destPath: destPath,
+          requiresManualReinstall: update.requiresManualReinstall);
 
       _downloadedApkPath = destPath;
       _downloadProgress = 1;

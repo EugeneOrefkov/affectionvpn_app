@@ -29,6 +29,21 @@ class ChecksumMismatchException implements Exception {
   String toString() => 'Проверка целостности APK не пройдена';
 }
 
+/// Thrown by [UpdateService.download] when the manifest reports
+/// `min_supported_version` higher than the running client. The channel
+/// cannot auto-update this build; the user must reinstall the current
+/// release manually (typically by downloading the universal APK).
+class VersionTooOldException implements Exception {
+  const VersionTooOldException(this.minVersion, this.currentVersion);
+
+  final String minVersion;
+  final String currentVersion;
+
+  @override
+  String toString() =>
+      'Текущая версия $currentVersion устарела для автообновления (минимум $minVersion). Переустановите приложение вручную.';
+}
+
 class UpdateService {
   UpdateService._();
   static final UpdateService instance = UpdateService._();
@@ -83,7 +98,10 @@ class UpdateService {
 
   /// Turns a decoded `latest.json` manifest into an [UpdateInfo] for the given
   /// device ABI, falling back to the universal asset. Null when the manifest
-  /// is not newer than [currentVersion] or carries no usable APK.
+  /// is not newer than [currentVersion] or carries no usable APK. When the
+  /// manifest carries a `min_supported_version` higher than [currentVersion]
+  /// the returned [UpdateInfo] has [UpdateInfo.requiresManualReinstall]
+  /// set; the caller must surface this to the user and reject the download.
   @visibleForTesting
   static UpdateInfo? parseManifest(
     Map<String, dynamic> data, {
@@ -118,6 +136,11 @@ class UpdateService {
       return null;
     }
 
+    final requiresManualReinstall = _isTooOldForChannel(
+      manifestMin: data['min_supported_version'] as String?,
+      currentVersion: currentVersion,
+    );
+
     final published = data['published_at'] as String?;
     return UpdateInfo(
       version: version,
@@ -128,6 +151,7 @@ class UpdateService {
       size: (asset['size'] as num?)?.toInt(),
       sha256: asset['sha256'] as String?,
       assetKey: assetKey,
+      requiresManualReinstall: requiresManualReinstall,
     );
   }
 
@@ -136,7 +160,20 @@ class UpdateService {
     void Function(int received, int total)? onProgress,
     String? expectedSha256,
     String? destPath,
+    bool requiresManualReinstall = false,
+    String? minVersion,
+    String? currentVersion,
   }) async {
+    // Belt-and-braces guard: the caller is expected to check the flag on
+    // the UpdateInfo it hands to this download (UI should already know).
+    // If it nevertheless asked us to download, refuse cleanly so we never
+    // hand an incompatible APK to the user.
+    if (requiresManualReinstall) {
+      throw VersionTooOldException(
+        minVersion ?? '?',
+        currentVersion ?? '?',
+      );
+    }
     final dir = await getApplicationDocumentsDirectory();
     final path = destPath ?? '${dir.path}/affection_vpn_update.apk';
 
@@ -263,6 +300,23 @@ class UpdateService {
       }
     }
     return false;
+  }
+
+  /// True when the manifest declares a `min_supported_version` higher than
+  /// the running client. Empty / malformed values are treated as "no
+  /// minimum" (i.e. do not block the channel).
+  static bool _isTooOldForChannel({
+    required String? manifestMin,
+    required String currentVersion,
+  }) {
+    if (manifestMin == null || manifestMin.trim().isEmpty) {
+      return false;
+    }
+    final minVersion = normalizeVersion(manifestMin);
+    if (minVersion.isEmpty) {
+      return false;
+    }
+    return _isNewer(minVersion, currentVersion);
   }
 
   static List<int>? _parse(String version) {
