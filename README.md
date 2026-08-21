@@ -1,5 +1,7 @@
 # Affection VPN
 
+[![CI](https://github.com/EugeneOrefkov/affectionvpn_app/actions/workflows/ci.yml/badge.svg)](https://github.com/EugeneOrefkov/affectionvpn_app/actions/workflows/ci.yml)
+
 Native Xray (VLESS) VPN client for Android and Linux with subscription
 support, real-time server switching, auto-select of the fastest server, and
 traffic stats.
