@@ -1,9 +1,9 @@
 # Update server: serves ./updates over HTTPS via the reverse proxy.
 #
 # Network model: nginx has NO published ports - it is reachable only from
-# containers attached to the shared `updates-net` bridge (the edge reverse
-# proxy joins it and proxies to http://updates:80). Only the proxy listens
-# on 443 publicly.
+# containers attached to the shared `affection-app_network` bridge (the edge
+# reverse proxy joins it and proxies to http://updates:80). Only the proxy
+# listens on 443 publicly.
 #
 # After changing this file on the server:
 #   git pull && docker compose up -d
@@ -15,10 +15,10 @@ services:
     volumes:
       - ./updates:/usr/share/nginx/html:ro
     networks:
-      - updates-net
+      - affection-app_network
 
 networks:
-  updates-net:
+  affection-app_network:
     # Fixed name so that containers from other compose projects (caddy)
     # can attach to it as an external network.
-    name: updates-net
+    name: affection-app_network
