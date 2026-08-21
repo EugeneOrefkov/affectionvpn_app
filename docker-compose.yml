@@ -2,14 +2,14 @@
 #
 # Network model: nginx has NO published ports - it is reachable only from
 # containers attached to the shared `affection-app_network` bridge (the edge
-# reverse proxy joins it and proxies to http://updates:80). Only the proxy
-# listens on 443 publicly.
+# reverse proxy joins it and proxies to http://affection-app:80 - port 80 is
+# the container-internal nginx port). Only the proxy listens on 443 publicly.
 #
 # After changing this file on the server:
 #   git pull && docker compose up -d
 
 services:
-  updates:
+  affection-app:
     image: nginx:alpine
     restart: unless-stopped
     volumes:
