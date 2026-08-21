@@ -1,4 +1,26 @@
-# Default reviewer for everything: the repository owner.
-# When a second developer joins, split by directories here, e.g.:
-#   /lib/services/ @EugeneOrefkov @second-dev
-* @EugeneOrefkov
+# Path-based ownership. The last matching rule wins, so put specific paths
+# first and keep the catch-all at the bottom.
+#
+# Names are GitHub handles. Replace @second-dev with the actual handle of the
+# second developer before this can act as a required reviewer.
+
+# Native mobile build, signing, Android-side code
+/android/                     @second-dev
+
+# Linux desktop build, packaging, distribution scripts
+/linux/                       @EugeneOrefkov
+/packaging/                   @EugeneOrefkov
+/scripts/                     @EugeneOrefkov
+
+# VPN/runtime code, update channel, app state - core product surface
+/lib/services/                @EugeneOrefkov
+/lib/models/                  @EugeneOrefkov
+/lib/state/                   @EugeneOrefkov
+/lib/core/                    @EugeneOrefkov
+
+# CI/CD, policy files, repository governance
+/.github/                     @EugeneOrefkov
+SECURITY.md                   @EugeneOrefkov
+
+# Catch-all: any file both developers may touch
+*                             @EugeneOrefkov @second-dev
